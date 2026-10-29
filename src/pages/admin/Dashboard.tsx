@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { AdminLayout, RouteGuard } from '@/components/layouts';
-import { Card, Spinner, Badge } from '@/components/ui';
-import { Users, FileText, TrendingUp, Activity, ArrowRight, Clock, Briefcase } from 'lucide-react';
+import { Button, Card, Spinner, Badge } from '@/components/ui';
+import { CreateAccountModal } from '@/components/CreateAccountModal';
+import { Users, FileText, TrendingUp, Activity, ArrowRight, Clock, Briefcase, UserPlus } from 'lucide-react';
 import type { AuditLog } from '@/types';
 
 export function AdminDashboard() {
@@ -12,32 +13,35 @@ export function AdminDashboard() {
   const [stats, setStats] = useState({ candidates: 0, workers: 0, tests: 0, avgScore: 0, attempts: 0 });
   const [recentActivity, setRecentActivity] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+
+  const fetchDashboardData = useCallback(async () => {
+    const [{ data: candidates }, { data: workers }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
+      supabase.from('profiles').select('id').eq('role', 'candidate'),
+      supabase.from('profiles').select('id').eq('role', 'worker'),
+      supabase.from('tests').select('id'),
+      supabase.from('attempts').select('score'),
+      supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(8),
+    ]);
+
+    const avgScore = attempts && attempts.length > 0
+      ? Math.round((attempts.reduce((sum, a) => sum + Number(a.score), 0) / attempts.length) * 10) / 10
+      : 0;
+
+    setStats({
+      candidates: candidates?.length || 0,
+      workers: workers?.length || 0,
+      tests: tests?.length || 0,
+      avgScore,
+      attempts: attempts?.length || 0,
+    });
+    setRecentActivity((logs || []) as AuditLog[]);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      const [{ data: candidates }, { data: workers }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
-        supabase.from('profiles').select('id').eq('role', 'candidate'),
-        supabase.from('profiles').select('id').eq('role', 'worker'),
-        supabase.from('tests').select('id'),
-        supabase.from('attempts').select('score'),
-        supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(8),
-      ]);
-
-      const avgScore = attempts && attempts.length > 0
-        ? Math.round((attempts.reduce((sum, a) => sum + Number(a.score), 0) / attempts.length) * 10) / 10
-        : 0;
-
-      setStats({
-        candidates: candidates?.length || 0,
-        workers: workers?.length || 0,
-        tests: tests?.length || 0,
-        avgScore,
-        attempts: attempts?.length || 0,
-      });
-      setRecentActivity((logs || []) as AuditLog[]);
-      setLoading(false);
-    })();
-  }, []);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (loading) return <RouteGuard roles={['admin', 'super_admin']}><AdminLayout current="/admin/dashboard"><div className="flex justify-center py-20"><Spinner size={32} /></div></AdminLayout></RouteGuard>;
 
@@ -47,9 +51,16 @@ export function AdminDashboard() {
   return (
     <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/dashboard">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Dashboard</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Platform overview and recent activity</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Dashboard</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Platform overview and recent activity</p>
+          </div>
+          {(isSuper || hasPerm('can-manage-users')) && (
+            <Button onClick={() => setShowCreateAccount(true)}>
+              <UserPlus size={16} /> Create Account
+            </Button>
+          )}
         </div>
 
         {/* Stats */}
@@ -155,6 +166,12 @@ export function AdminDashboard() {
             </div>
           </Card>
         )}
+        <CreateAccountModal
+          open={showCreateAccount}
+          onClose={() => setShowCreateAccount(false)}
+          onCreated={fetchDashboardData}
+          defaultRole={isSuper ? 'admin' : 'candidate'}
+        />
       </AdminLayout>
     </RouteGuard>
   );

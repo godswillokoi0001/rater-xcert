@@ -3,8 +3,9 @@ import { supabase, callAdminApi } from '@/lib/supabase';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Modal, Spinner, EmptyState, ConfirmDialog } from '@/components/ui';
 import { UserDetailsModal } from '@/components/UserDetailsModal';
+import { CreateAccountModal } from '@/components/CreateAccountModal';
 import type { Profile } from '@/types';
-import { Briefcase, Search, Trash2, UserCheck, UserX, Edit3, Mail, Eye, Award } from 'lucide-react';
+import { Briefcase, Search, Trash2, UserCheck, UserX, Edit3, Mail, Eye, Award, Plus } from 'lucide-react';
 
 export function AdminWorkersPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -15,6 +16,7 @@ export function AdminWorkersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [selectedUserForDetails, setSelectedUserForDetails] = useState<Profile | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showCreate, setShowCreate] = useState(false);
 
   const fetchProfiles = useCallback(async () => {
     const [{ data: profs }, { data: attemptsData }] = await Promise.all([
@@ -82,11 +84,16 @@ export function AdminWorkersPage() {
   return (
     <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/workers">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Worker Management</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Manage worker accounts, inspect tests written, and configure worker test access
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Worker Management</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Manage worker accounts, inspect tests written, and configure worker test access
+            </p>
+          </div>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> New Worker
+          </Button>
         </div>
 
         <Card className="p-4 mb-4">
@@ -257,6 +264,13 @@ export function AdminWorkersPage() {
             }}
           />
         )}
+
+        <CreateAccountModal
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreated={fetchProfiles}
+          defaultRole="worker"
+        />
 
         <ConfirmDialog
           open={!!deleteTarget}

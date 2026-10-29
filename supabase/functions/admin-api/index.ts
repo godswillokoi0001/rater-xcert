@@ -132,6 +132,93 @@ Deno.serve(async (req: Request) => {
       });
     };
 
+    // Route: POST /create-user or /create-account — super_admin (or authorized admin) creates any user account
+    if ((path === "create-user" || path === "create-account") && method === "POST") {
+      const { email, password, name, role, permissions, status } = await req.json();
+      if (!email || !password || !role) {
+        return new Response(JSON.stringify({ error: "Email, password, and role are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const targetRole = role as "candidate" | "worker" | "admin" | "super_admin";
+      if (!["candidate", "worker", "admin", "super_admin"].includes(targetRole)) {
+        return new Response(JSON.stringify({ error: "Invalid role specified" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Permission checks
+      if (targetRole === "super_admin") {
+        if (!isSuperAdmin) {
+          return new Response(JSON.stringify({ error: "Only a Super Admin can create another Super Admin account" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else if (targetRole === "admin") {
+        if (!isSuperAdmin && !hasPerm("can-manage-admins")) {
+          return new Response(JSON.stringify({ error: "Super admin access required to create administrators" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else {
+        if (!hasPerm("can-manage-users")) {
+          return new Response(JSON.stringify({ error: "Permission 'can-manage-users' required" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { name: name || email.split("@")[0], role: targetRole },
+      });
+
+      if (createErr || !newUser.user) {
+        return new Response(JSON.stringify({ error: createErr?.message || "Failed to create user account" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const userStatus = status || "active";
+      const userPerms = (targetRole === "admin" || targetRole === "super_admin") ? (permissions || []) : [];
+
+      await adminClient
+        .from("profiles")
+        .update({
+          role: targetRole,
+          name: name || email.split("@")[0],
+          status: userStatus,
+          permissions: userPerms,
+        })
+        .eq("id", newUser.user.id);
+
+      await logAudit("create_account", "user", newUser.user.id, {
+        email,
+        name: name || email.split("@")[0],
+        role: targetRole,
+        status: userStatus,
+        permissions: targetRole === "admin" ? userPerms : undefined,
+      });
+
+      return new Response(JSON.stringify({ success: true, id: newUser.user.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Route: POST /create-admin — super_admin creates a new admin account
     if (path === "create-admin" && method === "POST") {
       if (!isAdmin) {

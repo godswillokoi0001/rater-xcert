@@ -1,14 +1,13 @@
 import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { ThemeToggle } from '@/lib/theme';
 import { Button, Input, Label, Spinner } from '@/components/ui';
-import { GraduationCap, ShieldCheck, Mail, Lock, User, ArrowLeft, AlertCircle, Briefcase } from 'lucide-react';
+import { GraduationCap, ShieldCheck, Mail, Lock, User, ArrowLeft, AlertCircle, Briefcase, Sparkles, Key } from 'lucide-react';
 
-type Mode = 'candidate-login' | 'candidate-signup' | 'admin-login' | 'bootstrap';
-
-export function AuthPage({ mode }: { mode: Mode }) {
-  const { signIn, signUp } = useAuth();
+export function CandidateAuthPage({ mode = 'login' }: { mode?: 'login' | 'signup' }) {
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -20,27 +19,48 @@ export function AuthPage({ mode }: { mode: Mode }) {
     e.preventDefault();
     setError('');
     setLoading(true);
+
     try {
-      if (mode === 'candidate-signup') {
-        await signUp(email, password, name, signupRole);
+      if (mode === 'signup') {
+        await signUp(email.trim(), password, name.trim(), signupRole);
       } else {
-        await signIn(email, password);
+        const { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signInErr) throw signInErr;
+        if (!authData.user) throw new Error('Sign in failed');
+
+        // Verify that this account is a candidate or worker, NOT an admin
+        const { data: prof, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, name, role, status')
+          .eq('id', authData.user.id)
+          .maybeSingle();
+
+        if (profErr) throw profErr;
+
+        if (prof) {
+          if (prof.role === 'admin' || prof.role === 'super_admin') {
+            await supabase.auth.signOut();
+            throw new Error(
+              'This portal is exclusively for Candidates and Workers. Administrative accounts must use the Admin Portal link located in the website footer.'
+            );
+          }
+          if (prof.status === 'disabled') {
+            await supabase.auth.signOut();
+            throw new Error('Your account has been disabled. Please contact system support.');
+          }
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const titles: Record<Mode, { title: string; subtitle: string }> = {
-    'candidate-login': { title: 'Sign In', subtitle: 'Access your candidate or worker account' },
-    'candidate-signup': { title: 'Create Account', subtitle: 'Register as a Candidate or Worker' },
-    'admin-login': { title: 'Admin Sign In', subtitle: 'Manage tests, questions, and results' },
-    'bootstrap': { title: 'Create Super Admin', subtitle: 'Set up the first administrator account' },
-  };
-
-  const { title, subtitle } = titles[mode];
+  const isSignup = mode === 'signup';
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20 transition-colors">
@@ -58,30 +78,33 @@ export function AuthPage({ mode }: { mode: Mode }) {
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 animate-fade-in transition-colors">
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-blue-700 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-700/20">
-              {mode === 'admin-login' || mode === 'bootstrap' ? (
-                <ShieldCheck size={28} />
-              ) : mode === 'candidate-signup' && signupRole === 'worker' ? (
-                <Briefcase size={28} />
-              ) : (
-                <GraduationCap size={28} />
-              )}
+              {isSignup && signupRole === 'worker' ? <Briefcase size={28} /> : <GraduationCap size={28} />}
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">{title}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 text-center">{subtitle}</p>
+            <div className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 mb-2">
+              <Sparkles size={12} /> Candidate & Worker Portal
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">
+              {isSignup ? 'Create Account' : 'Welcome Back'}
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 text-center">
+              {isSignup
+                ? 'Register to access evaluations and certification tests'
+                : 'Sign in to access your tests and certification credentials'}
+            </p>
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300 animate-fade-in">
-              <AlertCircle size={18} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="flex items-start gap-2.5 p-3.5 mb-5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300 animate-fade-in">
+              <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+              <span className="leading-relaxed">{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'candidate-signup' && (
+            {isSignup && (
               <>
                 <div>
-                  <Label>Account Role</Label>
+                  <Label>I am registering as a:</Label>
                   <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-1.5">
                     <button
                       type="button"
@@ -99,7 +122,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
                       onClick={() => setSignupRole('worker')}
                       className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                         signupRole === 'worker'
-                          ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
+                          ? 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 shadow-sm'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                     >
@@ -112,6 +135,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
                       : 'Worker account for specialized worker evaluations and tasks.'}
                   </p>
                 </div>
+
                 <div>
                   <Label>Full Name</Label>
                   <div className="relative">
@@ -128,6 +152,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
                 </div>
               </>
             )}
+
             <div>
               <Label>Email Address</Label>
               <div className="relative">
@@ -142,6 +167,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
                 />
               </div>
             </div>
+
             <div>
               <Label>Password</Label>
               <div className="relative">
@@ -159,34 +185,167 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </div>
 
             <Button type="submit" disabled={loading} className="w-full" size="lg">
-              {loading ? <Spinner /> : mode === 'candidate-signup' ? 'Create Account' : 'Sign In'}
+              {loading ? <Spinner /> : isSignup ? 'Create Account' : 'Sign In'}
             </Button>
           </form>
 
-          {mode === 'admin-login' && (
+          {isSignup ? (
             <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
-              First time setup?{' '}
-              <button onClick={() => navigate('/bootstrap')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                Create super admin
+              Already have an account?{' '}
+              <button
+                onClick={() => navigate('/login')}
+                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+              >
+                Sign in
               </button>
             </p>
-          )}
-          {mode === 'candidate-login' && (
+          ) : (
             <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
               Don't have an account?{' '}
-              <button onClick={() => navigate('/signup')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+              <button
+                onClick={() => navigate('/signup')}
+                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+              >
                 Sign up as Candidate or Worker
               </button>
             </p>
           )}
-          {mode === 'candidate-signup' && (
-            <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
-              Already have an account?{' '}
-              <button onClick={() => navigate('/login')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                Sign in
-              </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AdminAuthPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (signInErr) throw signInErr;
+      if (!authData.user) throw new Error('Sign in failed');
+
+      // Verify that this account is an administrator
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, name, role, status')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (profErr) throw profErr;
+
+      if (prof) {
+        if (prof.role === 'candidate' || prof.role === 'worker') {
+          await supabase.auth.signOut();
+          throw new Error(
+            'Access Denied: You do not have administrative privileges. Candidates and Workers must sign in using the Candidate & Worker Portal.'
+          );
+        }
+        if (prof.status === 'disabled') {
+          await supabase.auth.signOut();
+          throw new Error('Your administrator account has been disabled. Please contact the system owner.');
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-slate-100 transition-colors">
+      <div className="w-full max-w-md">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={16} /> Back to home
+          </button>
+          <ThemeToggle />
+        </div>
+
+        <div className="bg-slate-900/90 rounded-2xl shadow-2xl border border-slate-800 p-8 animate-fade-in backdrop-blur-md">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white mb-3 shadow-xl shadow-blue-900/40 border border-blue-500/30">
+              <ShieldCheck size={28} />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-slate-800 text-blue-300 border border-slate-700 mb-2">
+              <Key size={12} className="text-blue-400" />
+              <span>Restricted • Authorized Administrators Only</span>
+            </div>
+
+            <h1 className="text-2xl font-bold text-white font-serif tracking-tight">Admin Portal</h1>
+            <p className="text-sm text-slate-400 mt-1 text-center">
+              System administration, evaluation management, and proctoring
             </p>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2.5 p-3.5 mb-5 rounded-xl bg-red-950/60 border border-red-800 text-sm text-red-200 animate-fade-in">
+              <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-400" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
           )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label className="text-slate-300">Administrator Email</Label>
+              <div className="relative">
+                <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@organization.com"
+                  className="pl-10 bg-slate-950/70 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-slate-300">Password</Label>
+              <div className="relative">
+                <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="pl-10 bg-slate-950/70 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500"
+                  minLength={6}
+                />
+              </div>
+            </div>
+
+            <Button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500" size="lg">
+              {loading ? <Spinner /> : 'Authenticate as Administrator'}
+            </Button>
+          </form>
+
+          <p className="text-center text-xs text-slate-500 mt-6">
+            First time setup?{' '}
+            <button
+              onClick={() => navigate('/bootstrap')}
+              className="text-blue-400 font-medium hover:underline"
+            >
+              Initialize Super Admin
+            </button>
+          </p>
         </div>
       </div>
     </div>
@@ -210,7 +369,7 @@ export function BootstrapPage() {
       const res = await fetch(`${supabaseUrl}/functions/v1/admin-api/bootstrap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed');
@@ -224,56 +383,85 @@ export function BootstrapPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 max-w-md w-full text-center animate-scale-in">
-          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-300 mx-auto mb-4">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-slate-100">
+        <div className="bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-8 max-w-md w-full text-center animate-scale-in">
+          <div className="w-16 h-16 rounded-full bg-emerald-950/60 border border-emerald-800 flex items-center justify-center text-emerald-400 mx-auto mb-4">
             <ShieldCheck size={32} />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Super Admin Created</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">Your super admin account is ready. You can now sign in to manage the platform.</p>
-          <Button onClick={() => navigate('/admin')} className="w-full">Go to Admin Sign In</Button>
+          <h2 className="text-xl font-bold text-white mb-2">Super Admin Initialized</h2>
+          <p className="text-sm text-slate-300 mb-6">
+            Your super administrator account has been created. You can now authenticate via the Admin Portal.
+          </p>
+          <Button onClick={() => navigate('/admin')} className="w-full">
+            Proceed to Admin Sign In
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-slate-100">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+          >
             <ArrowLeft size={16} /> Back to home
           </button>
           <ThemeToggle />
         </div>
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 animate-fade-in">
+        <div className="bg-slate-900 rounded-2xl shadow-xl border border-slate-800 p-8 animate-fade-in">
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-blue-700 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-700/20">
               <ShieldCheck size={28} />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">Create Super Admin</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Set up the first administrator account</p>
+            <h1 className="text-2xl font-bold text-white font-serif">Create Super Admin</h1>
+            <p className="text-sm text-slate-400 mt-1">Set up the initial system owner account</p>
           </div>
           {error && (
-            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300">
+            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-950/50 border border-red-800 text-sm text-red-200">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
           <form onSubmit={handleBootstrap} className="space-y-4">
             <div>
-              <Label>Full Name</Label>
-              <Input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Super Admin" />
+              <Label className="text-slate-300">Full Name</Label>
+              <Input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Super Admin"
+                className="bg-slate-950/70 border-slate-700 text-white"
+              />
             </div>
             <div>
-              <Label>Email Address</Label>
-              <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" />
+              <Label className="text-slate-300">Email Address</Label>
+              <Input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
+                className="bg-slate-950/70 border-slate-700 text-white"
+              />
             </div>
             <div>
-              <Label>Password</Label>
-              <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} />
+              <Label className="text-slate-300">Password</Label>
+              <Input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={6}
+                className="bg-slate-950/70 border-slate-700 text-white"
+              />
             </div>
-            <Button type="submit" disabled={loading} className="w-full" size="lg">
+            <Button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500" size="lg">
               {loading ? <Spinner /> : 'Create Super Admin'}
             </Button>
           </form>
@@ -281,4 +469,12 @@ export function BootstrapPage() {
       </div>
     </div>
   );
+}
+
+// Backward compatibility alias
+export function AuthPage({ mode }: { mode: 'candidate-login' | 'candidate-signup' | 'admin-login' | 'bootstrap' }) {
+  if (mode === 'admin-login') return <AdminAuthPage />;
+  if (mode === 'candidate-signup') return <CandidateAuthPage mode="signup" />;
+  if (mode === 'bootstrap') return <BootstrapPage />;
+  return <CandidateAuthPage mode="login" />;
 }

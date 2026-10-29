@@ -3,7 +3,7 @@ import { ThemeProvider } from '@/lib/theme';
 import { useHashRoute, navigate } from '@/lib/router';
 import { LoadingScreen } from '@/components/layouts';
 import { LandingPage } from '@/pages/Landing';
-import { AuthPage, BootstrapPage } from '@/pages/Auth';
+import { CandidateAuthPage, AdminAuthPage, BootstrapPage } from '@/pages/Auth';
 import { PendingApprovalPage } from '@/pages/PendingApproval';
 import { CandidateDashboard } from '@/pages/candidate/Dashboard';
 import { TestTakingPage } from '@/pages/candidate/TakeTest';
@@ -45,16 +45,32 @@ function Router() {
     return <PendingApprovalPage />;
   }
 
-  if (route === '/login' || route === '/signup' || route === '/admin') {
+  // Candidate and Worker Auth: Strictly for candidate and worker accounts
+  if (route === '/login' || route === '/signup') {
     if (user && profile) {
       if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
-      if (profile.role === 'candidate' || profile.role === 'worker') navigate('/candidate');
-      else navigate('/admin/dashboard');
+      if (profile.role === 'candidate' || profile.role === 'worker') {
+        navigate('/candidate');
+        return <LoadingScreen />;
+      }
+      navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
-    if (route === '/login') return <AuthPage mode="candidate-login" />;
-    if (route === '/signup') return <AuthPage mode="candidate-signup" />;
-    if (route === '/admin') return <AuthPage mode="admin-login" />;
+    if (route === '/login') return <CandidateAuthPage mode="login" />;
+    if (route === '/signup') return <CandidateAuthPage mode="signup" />;
+  }
+
+  // Admin Auth: Accessible via /admin or /admin/login (linked exclusively at footer)
+  if (route === '/admin' || route === '/admin/login') {
+    if (user && profile) {
+      if (profile.role === 'admin' || profile.role === 'super_admin') {
+        navigate('/admin/dashboard');
+        return <LoadingScreen />;
+      }
+      navigate('/candidate');
+      return <LoadingScreen />;
+    }
+    return <AdminAuthPage />;
   }
 
   if (needsApproval) {
@@ -70,7 +86,8 @@ function Router() {
   }
 
   if (parts[0] === 'admin') {
-    if (!user || !profile) { navigate('/admin'); return <LoadingScreen />; }
+    if (parts[1] === 'login') return <AdminAuthPage />;
+    if (!user || !profile) { navigate('/admin/login'); return <LoadingScreen />; }
     if (profile.role !== 'admin' && profile.role !== 'super_admin') { navigate('/candidate'); return <LoadingScreen />; }
     if (parts[1] === 'dashboard') return <AdminDashboard />;
     if (parts[1] === 'tests') return <AdminTestsPage />;

@@ -152,7 +152,7 @@ export function LandingPage() {
           </div>
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/admin/login')}
               className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors font-semibold"
               title="Administrator access"
             >

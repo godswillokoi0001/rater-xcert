@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Label, Modal, Spinner, EmptyState, ConfirmDialog } from '@/components/ui';
+import { CreateAccountModal } from '@/components/CreateAccountModal';
 import { PERMISSIONS } from '@/types';
 import type { Profile } from '@/types';
 import { ShieldCheck, Plus, Trash2, UserCheck, UserX, Edit3, Mail, Key } from 'lucide-react';
@@ -101,7 +102,12 @@ export function AdminAdminsPage() {
         )}
 
         {showCreate && (
-          <CreateAdminModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); fetchAdmins(); }} />
+          <CreateAccountModal
+            open={showCreate}
+            onClose={() => setShowCreate(false)}
+            onCreated={fetchAdmins}
+            defaultRole="admin"
+          />
         )}
 
         {editPerms && (
@@ -122,70 +128,7 @@ export function AdminAdminsPage() {
   );
 }
 
-function CreateAdminModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
 
-  const togglePerm = (perm: string) => {
-    setPermissions((prev) => prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await callAdminApi('create-admin', 'POST', { email, password, name, permissions });
-      onSaved();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create admin');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title="Create New Admin" maxWidth="max-w-md">
-      <div className="space-y-4">
-        <div>
-          <Label>Full Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="John Admin" />
-        </div>
-        <div>
-          <Label>Email Address</Label>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" />
-        </div>
-        <div>
-          <Label>Password</Label>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} />
-        </div>
-        <div>
-          <Label>Permissions</Label>
-          <div className="space-y-2">
-            {PERMISSIONS.map((perm) => (
-              <label key={perm} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                <input
-                  type="checkbox"
-                  checked={permissions.includes(perm)}
-                  onChange={() => togglePerm(perm)}
-                  className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-700 dark:text-slate-200">{perm.replace(/-/g, ' ').replace('can ', '')}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !email || !password || !name}>
-            {saving ? <Spinner /> : 'Create Admin'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 function PermissionsModal({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: () => void }) {
   const [permissions, setPermissions] = useState<string[]>(profile.permissions);
