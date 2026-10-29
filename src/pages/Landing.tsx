@@ -9,7 +9,8 @@ export function LandingPage() {
 
   const goToDashboard = () => {
     if (!user) return;
-    if (profile?.role === 'candidate' || profile?.role === 'worker') navigate('/candidate');
+    if (profile?.role === 'worker') navigate('/worker');
+    else if (profile?.role === 'candidate') navigate('/candidate');
     else if (profile?.role === 'admin' || profile?.role === 'super_admin') navigate('/admin/dashboard');
   };
 
@@ -106,7 +107,7 @@ export function LandingPage() {
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
               Access scheduled certifications, view pass/fail statistics, retake assessments when allowed by test policy, and print accredited PDF credentials.
             </p>
-            <button onClick={() => navigate('/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+            <button onClick={() => navigate('/candidate/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
               Join as Candidate <ArrowRight size={14} />
             </button>
           </div>
@@ -119,7 +120,7 @@ export function LandingPage() {
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
               Specialized evaluation tracks for staff and contractors. Complete verification tests, timed challenges, and track performance records with complete transparency.
             </p>
-            <button onClick={() => navigate('/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 hover:underline">
+            <button onClick={() => navigate('/worker/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 hover:underline">
               Join as Worker <ArrowRight size={14} />
             </button>
           </div>

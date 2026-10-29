@@ -19,6 +19,13 @@ export function CandidateDashboard() {
   const [loading, setLoading] = useState(true);
   const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
 
+  // If a worker visits /candidate, immediately redirect to /worker
+  useEffect(() => {
+    if (profile && profile.role === 'worker') {
+      navigate('/worker');
+    }
+  }, [profile]);
+
   const fetchData = useCallback(async () => {
     if (!user) return;
     const [
@@ -66,18 +73,18 @@ export function CandidateDashboard() {
       if (remaining > 0) retakeMap[u.test_id] = remaining;
     });
 
-    const userRole = profile?.role || 'candidate';
     const accessMap: Record<string, string> = {};
     (accessData || []).forEach((acc: { test_id: string; access_type: string }) => {
       accessMap[acc.test_id] = acc.access_type;
     });
 
+    // Candidates see tests targeted to 'candidate' or 'all', or granted individually
     const eligibleTests = testsWithCounts.filter((t) => {
       const override = accessMap[t.id];
-      if (override === 'blocked') return false; // blocked by admin
-      if (override === 'granted') return true;  // specifically released by admin
+      if (override === 'blocked') return false;
+      if (override === 'granted') return true;
       const target = t.target_role || 'all';
-      return target === 'all' || target === userRole;
+      return target === 'all' || target === 'candidate';
     });
 
     setTests(eligibleTests);
@@ -85,7 +92,7 @@ export function CandidateDashboard() {
     setNotifications((notifData || []) as Notification[]);
     setRetakeInfo(retakeMap);
     setLoading(false);
-  }, [user, profile]);
+  }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -159,16 +166,14 @@ export function CandidateDashboard() {
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">
-            {profile?.role === 'worker' ? 'Worker Dashboard' : 'Candidate Dashboard'}
+            Candidate Dashboard
           </h1>
-          <Badge color={profile?.role === 'worker' ? 'purple' : 'blue'}>
-            {profile?.role === 'worker' ? 'Worker Portal' : 'Candidate Portal'}
+          <Badge color="blue" dot>
+            Candidate Portal
           </Badge>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {profile?.role === 'worker'
-            ? 'Access your assigned worker evaluations, tests, and track your performance'
-            : 'View available certifications, complete exams, and review your results'}
+          View available certifications, complete exams, and review your accredited results.
         </p>
       </div>
 
@@ -248,12 +253,10 @@ export function CandidateDashboard() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold font-serif text-slate-900 dark:text-white tracking-tight">
-            {profile?.role === 'worker' ? 'Assigned Worker Evaluations' : 'Available Certifications'}
+            Available Certifications
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {profile?.role === 'worker'
-              ? 'Tests and tasks specifically allocated to your worker account'
-              : 'Official certification exams available for your candidate profile'}
+            Official certification exams available for your candidate profile
           </p>
         </div>
       </div>

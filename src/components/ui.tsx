@@ -252,6 +252,8 @@ export function ConfirmDialog({
             onClose();
           }}
         >
+
+
           {confirmLabel}
         </Button>
       </div>

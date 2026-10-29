@@ -5,7 +5,7 @@ import { Button, Card, Badge, Input, Modal, Spinner, EmptyState, ConfirmDialog }
 import { UserDetailsModal } from '@/components/UserDetailsModal';
 import { CreateAccountModal } from '@/components/CreateAccountModal';
 import type { Profile } from '@/types';
-import { Users, Search, Trash2, UserCheck, UserX, Edit3, Mail, Eye, Award, Plus } from 'lucide-react';
+import { Users, Search, Trash2, UserCheck, UserX, Edit3, Mail, Eye, Award, Plus, Briefcase } from 'lucide-react';
 
 export function AdminUsersPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -45,6 +45,19 @@ export function AdminUsersPage() {
   const handleApprove = async (profile: Profile) => {
     await supabase.rpc('update_user_status', { p_user_id: profile.id, p_status: 'active' });
     fetchProfiles();
+  };
+
+  const handleSwitchToWorker = async (profile: Profile) => {
+    try {
+      try {
+        await callAdminApi('update-user-role', 'POST', { userId: profile.id, role: 'worker' });
+      } catch {
+        await supabase.rpc('update_user_role', { p_user_id: profile.id, p_role: 'worker' });
+      }
+      fetchProfiles();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to switch role');
+    }
   };
 
   const handleDelete = async () => {
@@ -157,19 +170,33 @@ export function AdminUsersPage() {
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setSelectedUserForDetails(p)}
-                              title="View details, tests written, and manage test access"
-                            >
-                              <Eye size={14} /> Details
-                            </Button>
+                            {writtenCount > 0 ? (
+                              <Button
+                                size="sm"
+                                onClick={() => setSelectedUserForDetails(p)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                title="Review tests written by candidate"
+                              >
+                                <Eye size={14} /> Review ({writtenCount})
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setSelectedUserForDetails(p)}
+                                title="View details and manage test access"
+                              >
+                                <Eye size={14} /> Details
+                              </Button>
+                            )}
                             {p.status === 'pending' && (
                               <Button size="sm" variant="success" onClick={() => handleApprove(p)} title="Approve candidate">
                                 <UserCheck size={14} /> Approve
                               </Button>
                             )}
+                            <Button size="sm" variant="ghost" onClick={() => handleSwitchToWorker(p)} title="Switch to Worker role" className="text-purple-600 dark:text-purple-400">
+                              <Briefcase size={14} />
+                            </Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditTarget(p)} title="Edit Name"><Edit3 size={14} /></Button>
                             <Button size="sm" variant="ghost" onClick={() => handleToggleStatus(p)} title={p.status === 'active' ? 'Disable' : 'Enable'}>
                               {p.status === 'active' ? <UserX size={14} className="text-amber-600" /> : <UserCheck size={14} className="text-green-600" />}

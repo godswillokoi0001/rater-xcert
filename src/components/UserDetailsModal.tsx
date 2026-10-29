@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, callAdminApi } from '@/lib/supabase';
 import { Modal, Badge, Button, Spinner, EmptyState } from '@/components/ui';
+import { ReviewAttemptModal } from '@/components/ReviewAttemptModal';
+import { printAttemptPdf } from '@/lib/printResult';
 import type { Profile, Test, AttemptWithDetails, UserTestAccess } from '@/types';
 import {
   FileText, Award, CheckCircle2, XCircle, Clock, ShieldAlert,
-  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check,
+  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check, GraduationCap, Printer
 } from 'lucide-react';
 
 interface UserDetailsModalProps {
@@ -16,10 +18,13 @@ interface UserDetailsModalProps {
 export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'tests' | 'access'>('tests');
   const [loading, setLoading] = useState(true);
+  const [currentRole, setCurrentRole] = useState(user.role);
+  const [switchingRole, setSwitchingRole] = useState(false);
   const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
   const [allTests, setAllTests] = useState<Test[]>([]);
   const [testAccessMap, setTestAccessMap] = useState<Record<string, UserTestAccess>>({});
   const [updatingTestId, setUpdatingTestId] = useState<string | null>(null);
+  const [selectedAttemptIdForReview, setSelectedAttemptIdForReview] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -173,7 +178,27 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
     };
   };
 
-  const isWorker = user.role === 'worker';
+  const isWorker = currentRole === 'worker';
+
+  const handleSwitchRole = async () => {
+    const nextRole = isWorker ? 'candidate' : 'worker';
+    setSwitchingRole(true);
+    try {
+      try {
+        await callAdminApi('update-user-role', 'POST', { userId: user.id, role: nextRole });
+      } catch {
+        await supabase.rpc('update_user_role', { p_user_id: user.id, p_role: nextRole });
+      }
+      user.role = nextRole;
+      setCurrentRole(nextRole);
+      showToast(`User successfully changed to ${nextRole === 'worker' ? 'Worker' : 'Candidate'}.`);
+      onUserUpdated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update user role');
+    } finally {
+      setSwitchingRole(false);
+    }
+  };
 
   return (
     <Modal open={true} onClose={onClose} title="User Details & Test Management" maxWidth="max-w-4xl">
@@ -197,6 +222,26 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                   <Badge color={isWorker ? 'purple' : 'blue'}>
                     {isWorker ? 'Worker' : 'Candidate'}
                   </Badge>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={switchingRole}
+                    onClick={handleSwitchRole}
+                    title={`Switch role to ${isWorker ? 'Candidate' : 'Worker'}`}
+                    className="text-xs h-7 px-2.5"
+                  >
+                    {switchingRole ? (
+                      <Spinner size={12} />
+                    ) : isWorker ? (
+                      <>
+                        <GraduationCap size={13} /> Switch to Candidate
+                      </>
+                    ) : (
+                      <>
+                        <Briefcase size={13} /> Switch to Worker
+                      </>
+                    )}
+                  </Button>
                   <Badge color={user.status === 'active' ? 'green' : user.status === 'pending' ? 'amber' : 'red'}>
                     {user.status}
                   </Badge>
@@ -300,16 +345,21 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-center">
+                    <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                      <Button
+                        size="sm"
+                        onClick={() => setSelectedAttemptIdForReview(att.id)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Eye size={14} /> Review & Grade
+                      </Button>
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => {
-                          window.location.hash = `/admin/results`;
-                          onClose();
-                        }}
+                        onClick={() => printAttemptPdf(att.id)}
+                        title="Print accredited result report PDF"
                       >
-                        <Eye size={14} /> Review in Results
+                        <Printer size={14} /> Print PDF
                       </Button>
                     </div>
                   </div>
@@ -444,6 +494,13 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
           </Button>
         </div>
       </div>
+
+      <ReviewAttemptModal
+        open={!!selectedAttemptIdForReview}
+        attemptId={selectedAttemptIdForReview}
+        onClose={() => setSelectedAttemptIdForReview(null)}
+        onUpdated={loadUserData}
+      />
     </Modal>
   );
 }

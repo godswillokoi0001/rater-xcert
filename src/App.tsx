@@ -6,6 +6,7 @@ import { LandingPage } from '@/pages/Landing';
 import { CandidateAuthPage, AdminAuthPage, BootstrapPage } from '@/pages/Auth';
 import { PendingApprovalPage } from '@/pages/PendingApproval';
 import { CandidateDashboard } from '@/pages/candidate/Dashboard';
+import { WorkerDashboard } from '@/pages/worker/Dashboard';
 import { TestTakingPage } from '@/pages/candidate/TakeTest';
 import { AdminDashboard } from '@/pages/admin/Dashboard';
 import { AdminTestsPage } from '@/pages/admin/Tests';
@@ -38,18 +39,47 @@ function Router() {
   if (route === '/pending-approval') {
     if (!user) { navigate('/login'); return <LoadingScreen />; }
     if ((profile?.role !== 'candidate' && profile?.role !== 'worker') || profile.status !== 'pending') {
-      if (profile?.role === 'candidate' || profile?.role === 'worker') navigate('/candidate');
+      if (profile?.role === 'worker') navigate('/worker');
+      else if (profile?.role === 'candidate') navigate('/candidate');
       else navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
     return <PendingApprovalPage />;
   }
 
-  // Candidate and Worker Auth: Strictly for candidate and worker accounts
+  // Dedicated Worker Auth routes
+  if (route === '/worker/login' || route === '/worker/signup') {
+    if (user && profile) {
+      if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
+      if (profile.role === 'worker') { navigate('/worker'); return <LoadingScreen />; }
+      if (profile.role === 'candidate') { navigate('/candidate'); return <LoadingScreen />; }
+      navigate('/admin/dashboard');
+      return <LoadingScreen />;
+    }
+    return <CandidateAuthPage mode={route === '/worker/signup' ? 'signup' : 'login'} forcedRole="worker" />;
+  }
+
+  // Dedicated Candidate Auth routes
+  if (route === '/candidate/login' || route === '/candidate/signup') {
+    if (user && profile) {
+      if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
+      if (profile.role === 'worker') { navigate('/worker'); return <LoadingScreen />; }
+      if (profile.role === 'candidate') { navigate('/candidate'); return <LoadingScreen />; }
+      navigate('/admin/dashboard');
+      return <LoadingScreen />;
+    }
+    return <CandidateAuthPage mode={route === '/candidate/signup' ? 'signup' : 'login'} forcedRole="candidate" />;
+  }
+
+  // General Candidate and Worker Auth
   if (route === '/login' || route === '/signup') {
     if (user && profile) {
       if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
-      if (profile.role === 'candidate' || profile.role === 'worker') {
+      if (profile.role === 'worker') {
+        navigate('/worker');
+        return <LoadingScreen />;
+      }
+      if (profile.role === 'candidate') {
         navigate('/candidate');
         return <LoadingScreen />;
       }
@@ -67,7 +97,8 @@ function Router() {
         navigate('/admin/dashboard');
         return <LoadingScreen />;
       }
-      navigate('/candidate');
+      if (profile.role === 'worker') navigate('/worker');
+      else navigate('/candidate');
       return <LoadingScreen />;
     }
     return <AdminAuthPage />;
@@ -78,9 +109,20 @@ function Router() {
     return <LoadingScreen />;
   }
 
-  if (parts[0] === 'candidate' || parts[0] === 'worker') {
-    if (!user || !profile) { navigate('/login'); return <LoadingScreen />; }
-    if (profile.role !== 'candidate' && profile.role !== 'worker') { navigate('/admin/dashboard'); return <LoadingScreen />; }
+  // Dedicated Worker Portal Routes
+  if (parts[0] === 'worker') {
+    if (!user || !profile) { navigate('/worker/login'); return <LoadingScreen />; }
+    if (profile.role === 'candidate') { navigate('/candidate'); return <LoadingScreen />; }
+    if (profile.role !== 'worker') { navigate('/admin/dashboard'); return <LoadingScreen />; }
+    if (parts.length === 1) return <WorkerDashboard />;
+    if (parts[1] === 'test' && parts[2]) return <TestTakingPage testId={parts[2]} />;
+  }
+
+  // Dedicated Candidate Portal Routes
+  if (parts[0] === 'candidate') {
+    if (!user || !profile) { navigate('/candidate/login'); return <LoadingScreen />; }
+    if (profile.role === 'worker') { navigate('/worker'); return <LoadingScreen />; }
+    if (profile.role !== 'candidate') { navigate('/admin/dashboard'); return <LoadingScreen />; }
     if (parts.length === 1) return <CandidateDashboard />;
     if (parts[1] === 'test' && parts[2]) return <TestTakingPage testId={parts[2]} />;
   }

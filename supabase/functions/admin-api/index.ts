@@ -219,6 +219,56 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Route: POST /update-user-role — switch user between candidate and worker
+    if (path === "update-user-role" && method === "POST") {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { userId, role } = await req.json();
+      if (!userId || !role || !["candidate", "worker"].includes(role)) {
+        return new Response(JSON.stringify({ error: "Valid userId and role (candidate or worker) required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      const { data: prof, error: getErr } = await adminClient
+        .from("profiles")
+        .select("name, role")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (getErr || !prof) {
+        return new Response(JSON.stringify({ error: "User not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await adminClient
+        .from("profiles")
+        .update({ role })
+        .eq("id", userId);
+
+      await adminClient.auth.admin.updateUserById(userId, {
+        user_metadata: { role },
+      });
+
+      await logAudit("update_user_role", "user", userId, { oldRole: prof.role, newRole: role });
+
+      return new Response(JSON.stringify({ success: true, role }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Route: POST /create-admin — super_admin creates a new admin account
     if (path === "create-admin" && method === "POST") {
       if (!isAdmin) {

@@ -1,10 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 
 export function useHashRoute() {
-  const [route, setRoute] = useState(() => window.location.hash.slice(1) || '/');
+  const parseHash = () => {
+    const raw = window.location.hash.slice(1) || '/';
+    const [pathPart, queryPart] = raw.split('?');
+    const pathname = pathPart || '/';
+    const params = new URLSearchParams(queryPart || '');
+    return { route: pathname, rawRoute: raw, pathname, query: params };
+  };
+
+  const [state, setState] = useState(parseHash);
 
   useEffect(() => {
-    const onHash = () => setRoute(window.location.hash.slice(1) || '/');
+    const onHash = () => setState(parseHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -13,7 +21,13 @@ export function useHashRoute() {
     window.location.hash = to;
   }, []);
 
-  return { route, navigate };
+  return {
+    route: state.pathname,
+    rawRoute: state.rawRoute,
+    pathname: state.pathname,
+    query: state.query,
+    navigate,
+  };
 }
 
 export function navigate(to: string) {

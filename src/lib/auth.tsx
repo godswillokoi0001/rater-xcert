@@ -38,7 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (data) {
-      setProfile(data as Profile);
+      let finalProf = data as Profile;
+      try {
+        const { data: uData } = await supabase.auth.getUser();
+        if (uData?.user?.user_metadata?.role === 'worker' && finalProf.role === 'candidate') {
+          await supabase.from('profiles').update({ role: 'worker' }).eq('id', uid);
+          finalProf = { ...finalProf, role: 'worker' };
+        }
+      } catch {}
+      setProfile(finalProf);
       setProfileLoading(false);
     } else {
       setTimeout(async () => {
@@ -47,7 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select('id, name, role, status, permissions, created_at, last_login, email_verified')
           .eq('id', uid)
           .maybeSingle();
-        if (retry) setProfile(retry as Profile);
+        if (retry) {
+          let finalRetry = retry as Profile;
+          try {
+            const { data: uData } = await supabase.auth.getUser();
+            if (uData?.user?.user_metadata?.role === 'worker' && finalRetry.role === 'candidate') {
+              await supabase.from('profiles').update({ role: 'worker' }).eq('id', uid);
+              finalRetry = { ...finalRetry, role: 'worker' };
+            }
+          } catch {}
+          setProfile(finalRetry);
+        }
         setProfileLoading(false);
       }, 500);
     }
@@ -92,12 +110,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string, role: 'candidate' | 'worker' = 'candidate') => {
-    const { error } = await supabase.auth.signUp({
+    const { data: authData, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name, role } },
     });
     if (error) throw error;
+
+    if (authData?.user) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ role, name })
+          .eq('id', authData.user.id);
+      } catch {}
+      try {
+        await supabase.rpc('claim_my_role', { p_role: role });
+      } catch {}
+    }
   };
 
   const signOut = async () => {

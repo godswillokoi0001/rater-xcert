@@ -134,27 +134,66 @@ export function CandidateLayout({ children }: { children: ReactNode }) {
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={() => navigate('/candidate')} className="flex items-center gap-3 text-left group">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform">
-              <ClipboardCheck size={20} />
+              <GraduationCap size={20} />
             </div>
             <div>
               <span className="block font-bold text-slate-900 dark:text-white font-serif leading-none tracking-tight">Rater-X</span>
               <span className="text-[10px] uppercase font-semibold text-blue-600 dark:text-blue-400 tracking-wider">
-                {profile.role === 'worker' ? 'Worker Portal' : 'Assessment Hub'}
+                Candidate Assessment Hub
               </span>
             </div>
           </button>
           <div className="flex items-center gap-3 sm:gap-4">
             <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'User'}</p>
-              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 capitalize">{profile.role}</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'Candidate'}</p>
+              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 capitalize">Candidate</p>
             </div>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs ${
-              profile.role === 'worker'
-                ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
-                : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-            }`}>
-              {profile.role === 'worker' ? <Briefcase size={18} /> : <GraduationCap size={18} />}
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+              <GraduationCap size={18} />
+            </div>
+            <button
+              onClick={async () => { await signOut(); navigate('/'); }}
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              title="Sign Out"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+    </div>
+  );
+}
+
+export function WorkerLayout({ children }: { children: ReactNode }) {
+  const { profile, signOut } = useAuth();
+  if (!profile) return null;
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+      <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-purple-200/80 dark:border-purple-900/50 sticky top-0 z-40 transition-colors shadow-2xs">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+          <button onClick={() => navigate('/worker')} className="flex items-center gap-3 text-left group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-700 via-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm shadow-purple-500/20 group-hover:scale-105 transition-transform">
+              <Briefcase size={20} />
+            </div>
+            <div>
+              <span className="block font-bold text-slate-900 dark:text-white font-serif leading-none tracking-tight">Rater-X</span>
+              <span className="text-[10px] uppercase font-semibold text-purple-600 dark:text-purple-400 tracking-wider">
+                Worker Operations Hub
+              </span>
+            </div>
+          </button>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'Worker'}</p>
+              <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">Verified Worker</p>
+            </div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
+              <Briefcase size={18} />
             </div>
             <button
               onClick={async () => { await signOut(); navigate('/'); }}

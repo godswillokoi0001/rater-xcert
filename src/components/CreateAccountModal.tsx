@@ -97,6 +97,19 @@ export function CreateAccountModal({
         if (signUpErr) throw signUpErr;
 
         if (signUpData.user) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({ role, name: name.trim(), status })
+              .eq('id', signUpData.user.id);
+          } catch {}
+
+          if (role === 'worker') {
+            try {
+              await supabase.rpc('update_user_role', { p_user_id: signUpData.user.id, p_role: 'worker' });
+            } catch {}
+          }
+
           if (status === 'active') {
             await supabase.rpc('update_user_status', { p_user_id: signUpData.user.id, p_status: 'active' });
           }

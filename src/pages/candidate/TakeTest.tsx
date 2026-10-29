@@ -40,7 +40,8 @@ function getExternalUrl(value: string): string | null {
 }
 
 export function TestTakingPage({ testId }: { testId: string }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const homePath = profile?.role === 'worker' ? '/worker' : '/candidate';
   const [data, setData] = useState<TestData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
@@ -61,8 +62,8 @@ export function TestTakingPage({ testId }: { testId: string }) {
     (async () => {
       if (!user) return;
       const { data: test } = await supabase.from('tests').select('*').eq('id', testId).maybeSingle();
-      if (!test) { navigate('/candidate'); return; }
-      if (test.status !== 'published') { navigate('/candidate'); return; }
+      if (!test) { navigate(homePath); return; }
+      if (test.status !== 'published') { navigate(homePath); return; }
 
       const { data: canTake, error: canTakeErr } = await supabase.rpc('can_take_test', { p_test_id: testId });
       if (canTakeErr || (canTake && !canTake.can_take)) {
@@ -73,7 +74,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
 
       const { data: sections } = await supabase
         .from('sections').select('*').eq('test_id', testId).order('order_index', { ascending: true });
-      if (!sections || sections.length === 0) { navigate('/candidate'); return; }
+      if (!sections || sections.length === 0) { navigate(homePath); return; }
 
       const sectionIds = sections.map((s) => s.id);
       const { data: questions } = await supabase
@@ -262,7 +263,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
           <div className="w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400"><Clock size={40} /></div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-2">Test Not Available</h1>
           <p className="text-slate-600 dark:text-slate-400 mb-6">{blockedReason}</p>
-          <Button onClick={() => navigate('/candidate')} size="lg" className="w-full">Back to Dashboard</Button>
+          <Button onClick={() => navigate(homePath)} size="lg" className="w-full">Back to Dashboard</Button>
         </Card>
       </div>
     );
@@ -304,7 +305,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
               </div>
             </>
           )}
-          <Button onClick={() => navigate('/candidate')} size="lg" className="w-full">Back to Dashboard</Button>
+          <Button onClick={() => navigate(homePath)} size="lg" className="w-full">Back to Dashboard</Button>
         </Card>
       </div>
     );
