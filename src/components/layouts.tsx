@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { ThemeToggle } from '@/lib/theme';
 import { Spinner } from '@/components/ui';
-import { ClipboardCheck, LogOut, LayoutDashboard, FileText, Users, ShieldCheck, BarChart3, ScrollText, GraduationCap } from 'lucide-react';
+import { ClipboardCheck, LogOut, LayoutDashboard, FileText, Users, ShieldCheck, BarChart3, ScrollText, GraduationCap, Briefcase } from 'lucide-react';
 import type { Role } from '@/types';
 
 export function LoadingScreen() {
@@ -22,7 +22,7 @@ export function RouteGuard({ roles, children }: { roles: Role[]; children: React
     navigate('/');
     return <LoadingScreen />;
   }
-  if (profile.role === 'candidate' && profile.status === 'pending') {
+  if ((profile.role === 'candidate' || profile.role === 'worker') && profile.status === 'pending') {
     navigate('/pending-approval');
     return <LoadingScreen />;
   }
@@ -36,7 +36,8 @@ export function RouteGuard({ roles, children }: { roles: Role[]; children: React
 const adminNav = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, perm: null },
   { path: '/admin/tests', label: 'Tests', icon: FileText, perm: 'can-manage-tests' },
-  { path: '/admin/users', label: 'Users', icon: Users, perm: 'can-manage-users' },
+  { path: '/admin/users', label: 'Candidates', icon: Users, perm: 'can-manage-users' },
+  { path: '/admin/workers', label: 'Workers', icon: Briefcase, perm: 'can-manage-users' },
   { path: '/admin/admins', label: 'Admins', icon: ShieldCheck, perm: null, superOnly: true },
   { path: '/admin/results', label: 'Results', icon: BarChart3, perm: 'can-view-reports' },
   { path: '/admin/audit', label: 'Audit Log', icon: ScrollText, perm: null },
@@ -128,11 +129,11 @@ export function CandidateLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 sm:gap-4">
             <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{profile.name || 'Candidate'}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Candidate</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{profile.name || 'User'}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{profile.role}</p>
             </div>
             <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
-              <GraduationCap size={18} />
+              {profile.role === 'worker' ? <Briefcase size={18} /> : <GraduationCap size={18} />}
             </div>
             <button
               onClick={async () => { await signOut(); navigate('/'); }}

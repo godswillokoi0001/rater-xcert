@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { ThemeToggle } from '@/lib/theme';
 import { Button, Input, Label, Spinner } from '@/components/ui';
-import { GraduationCap, ShieldCheck, Mail, Lock, User, ArrowLeft, AlertCircle } from 'lucide-react';
+import { GraduationCap, ShieldCheck, Mail, Lock, User, ArrowLeft, AlertCircle, Briefcase } from 'lucide-react';
 
 type Mode = 'candidate-login' | 'candidate-signup' | 'admin-login' | 'bootstrap';
 
@@ -12,6 +12,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [signupRole, setSignupRole] = useState<'candidate' | 'worker'>('candidate');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +22,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
     setLoading(true);
     try {
       if (mode === 'candidate-signup') {
-        await signUp(email, password, name);
+        await signUp(email, password, name, signupRole);
       } else {
         await signIn(email, password);
       }
@@ -33,8 +34,8 @@ export function AuthPage({ mode }: { mode: Mode }) {
   };
 
   const titles: Record<Mode, { title: string; subtitle: string }> = {
-    'candidate-login': { title: 'Candidate Sign In', subtitle: 'Access your certification exams' },
-    'candidate-signup': { title: 'Create Account', subtitle: 'Register to take certification exams' },
+    'candidate-login': { title: 'Sign In', subtitle: 'Access your candidate or worker account' },
+    'candidate-signup': { title: 'Create Account', subtitle: 'Register as a Candidate or Worker' },
     'admin-login': { title: 'Admin Sign In', subtitle: 'Manage tests, questions, and results' },
     'bootstrap': { title: 'Create Super Admin', subtitle: 'Set up the first administrator account' },
   };
@@ -57,7 +58,13 @@ export function AuthPage({ mode }: { mode: Mode }) {
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 animate-fade-in transition-colors">
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-blue-700 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-700/20">
-              {mode === 'admin-login' || mode === 'bootstrap' ? <ShieldCheck size={28} /> : <GraduationCap size={28} />}
+              {mode === 'admin-login' || mode === 'bootstrap' ? (
+                <ShieldCheck size={28} />
+              ) : mode === 'candidate-signup' && signupRole === 'worker' ? (
+                <Briefcase size={28} />
+              ) : (
+                <GraduationCap size={28} />
+              )}
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">{title}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 text-center">{subtitle}</p>
@@ -72,20 +79,54 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'candidate-signup' && (
-              <div>
-                <Label>Full Name</Label>
-                <div className="relative">
-                  <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Jane Doe"
-                    className="pl-10"
-                  />
+              <>
+                <div>
+                  <Label>Account Role</Label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSignupRole('candidate')}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                        signupRole === 'candidate'
+                          ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <GraduationCap size={16} /> Candidate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignupRole('worker')}
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                        signupRole === 'worker'
+                          ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <Briefcase size={16} /> Worker
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {signupRole === 'candidate'
+                      ? 'Candidate account for taking certification tests and receiving credentials.'
+                      : 'Worker account for specialized worker evaluations and tasks.'}
+                  </p>
                 </div>
-              </div>
+                <div>
+                  <Label>Full Name</Label>
+                  <div className="relative">
+                    <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={signupRole === 'candidate' ? 'Jane Doe' : 'Alex Staff'}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </>
             )}
             <div>
               <Label>Email Address</Label>
@@ -134,7 +175,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
               Don't have an account?{' '}
               <button onClick={() => navigate('/signup')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                Sign up
+                Sign up as Candidate or Worker
               </button>
             </p>
           )}

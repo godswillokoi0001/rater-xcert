@@ -76,6 +76,7 @@ export function AdminTestsPage() {
       p_review_mode: test.review_mode || 'super_admin_approval',
       p_retakes_allowed: test.retakes_allowed ?? 0,
       p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+      p_target_role: test.target_role || 'all',
     });
     fetchTests();
   };
@@ -132,6 +133,16 @@ export function AdminTestsPage() {
                               : test.retakes_allowed && test.retakes_allowed > 0
                               ? `${test.retakes_allowed} Retake${test.retakes_allowed > 1 ? 's' : ''}`
                               : 'No Retakes'}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                            test.target_role === 'worker'
+                              ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                              : test.target_role === 'candidate'
+                              ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                              : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          }`}>
+                            <Users size={10} />
+                            {test.target_role === 'worker' ? 'Workers Only' : test.target_role === 'candidate' ? 'Candidates Only' : 'All Users'}
                           </span>
                         </div>
                       </div>
@@ -199,6 +210,7 @@ function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClos
   const [reviewMode, setReviewMode] = useState<ReviewMode>(test?.review_mode || 'super_admin_approval');
   const [retakesAllowed, setRetakesAllowed] = useState<number>(test?.retakes_allowed ?? 0);
   const [retakeOnFailOnly, setRetakeOnFailOnly] = useState<boolean>(test?.retake_on_fail_only ?? true);
+  const [targetRole, setTargetRole] = useState<'all' | 'candidate' | 'worker'>(test?.target_role || 'all');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -214,6 +226,7 @@ function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClos
           p_review_mode: reviewMode,
           p_retakes_allowed: retakesAllowed,
           p_retake_on_fail_only: retakeOnFailOnly,
+          p_target_role: targetRole,
         });
       } else {
         await supabase.rpc('create_test', {
@@ -223,6 +236,7 @@ function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClos
           p_review_mode: reviewMode,
           p_retakes_allowed: retakesAllowed,
           p_retake_on_fail_only: retakeOnFailOnly,
+          p_target_role: targetRole,
         });
       }
       onSaved();
@@ -259,6 +273,22 @@ function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClos
               </Select>
             </div>
           )}
+        </div>
+
+        <div>
+          <Label>Target Audience (Who can take this test)</Label>
+          <Select value={targetRole} onChange={(e) => setTargetRole(e.target.value as 'all' | 'candidate' | 'worker')}>
+            <option value="all">All Users (Candidates & Workers)</option>
+            <option value="candidate">Candidates Only</option>
+            <option value="worker">Workers Only</option>
+          </Select>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {targetRole === 'all'
+              ? 'Both candidate and worker accounts will be able to see and take this test.'
+              : targetRole === 'candidate'
+              ? 'Only candidate accounts will see and take this test.'
+              : 'Only worker accounts will see and take this test.'}
+          </p>
         </div>
 
         {/* Retakes & Limits Configuration */}

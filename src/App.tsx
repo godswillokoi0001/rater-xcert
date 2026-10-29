@@ -10,6 +10,7 @@ import { TestTakingPage } from '@/pages/candidate/TakeTest';
 import { AdminDashboard } from '@/pages/admin/Dashboard';
 import { AdminTestsPage } from '@/pages/admin/Tests';
 import { AdminUsersPage } from '@/pages/admin/Users';
+import { AdminWorkersPage } from '@/pages/admin/Workers';
 import { AdminAdminsPage } from '@/pages/admin/Admins';
 import { AdminResultsPage } from '@/pages/admin/Results';
 import { AdminAuditPage } from '@/pages/admin/Audit';
@@ -28,7 +29,7 @@ function Router() {
 
   if (route === '/bootstrap') return <BootstrapPage />;
 
-  // Gate: if candidate is pending approval, force to pending-approval
+  // Gate: if candidate or worker is pending approval, force to pending-approval
   if (needsApproval && route !== '/pending-approval') {
     navigate('/pending-approval');
     return <LoadingScreen />;
@@ -36,8 +37,8 @@ function Router() {
 
   if (route === '/pending-approval') {
     if (!user) { navigate('/login'); return <LoadingScreen />; }
-    if (profile?.role !== 'candidate' || profile.status !== 'pending') {
-      if (profile?.role === 'candidate') navigate('/candidate');
+    if ((profile?.role !== 'candidate' && profile?.role !== 'worker') || profile.status !== 'pending') {
+      if (profile?.role === 'candidate' || profile?.role === 'worker') navigate('/candidate');
       else navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
@@ -47,7 +48,7 @@ function Router() {
   if (route === '/login' || route === '/signup' || route === '/admin') {
     if (user && profile) {
       if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
-      if (profile.role === 'candidate') navigate('/candidate');
+      if (profile.role === 'candidate' || profile.role === 'worker') navigate('/candidate');
       else navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
@@ -61,9 +62,9 @@ function Router() {
     return <LoadingScreen />;
   }
 
-  if (parts[0] === 'candidate') {
+  if (parts[0] === 'candidate' || parts[0] === 'worker') {
     if (!user || !profile) { navigate('/login'); return <LoadingScreen />; }
-    if (profile.role !== 'candidate') { navigate('/admin/dashboard'); return <LoadingScreen />; }
+    if (profile.role !== 'candidate' && profile.role !== 'worker') { navigate('/admin/dashboard'); return <LoadingScreen />; }
     if (parts.length === 1) return <CandidateDashboard />;
     if (parts[1] === 'test' && parts[2]) return <TestTakingPage testId={parts[2]} />;
   }
@@ -74,6 +75,7 @@ function Router() {
     if (parts[1] === 'dashboard') return <AdminDashboard />;
     if (parts[1] === 'tests') return <AdminTestsPage />;
     if (parts[1] === 'users') return <AdminUsersPage />;
+    if (parts[1] === 'workers') return <AdminWorkersPage />;
     if (parts[1] === 'admins') return <AdminAdminsPage />;
     if (parts[1] === 'results') return <AdminResultsPage />;
     if (parts[1] === 'audit') return <AdminAuditPage />;

@@ -6,6 +6,7 @@ import type { AttemptWithDetails, Test, QuestionType, Answer } from '@/types';
 import {
   BarChart3, Download, CheckCircle2, XCircle, TrendingUp, Eye, Send, Clock,
   FileText, X, ExternalLink, RotateCcw, Printer, Save, Award, Check, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search,
 } from 'lucide-react';
 
 interface ReviewData {
@@ -54,9 +55,12 @@ export function AdminResultsPage() {
   const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [testFilter, setTestFilter] = useState('all');
   const [resultFilter, setResultFilter] = useState('all');
   const [reviewFilter, setReviewFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [reviewData, setReviewData] = useState<ReviewData | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
@@ -101,11 +105,22 @@ export function AdminResultsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const filtered = attempts.filter((a) => {
+    if (search) {
+      const q = search.toLowerCase();
+      const matchName = (a.candidate_name || '').toLowerCase().includes(q);
+      const matchEmail = (a.candidate_email || '').toLowerCase().includes(q);
+      const matchTest = (a.test_title || '').toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchTest) return false;
+    }
     if (testFilter !== 'all' && a.test_id !== testFilter) return false;
     if (resultFilter !== 'all' && a.pass_or_fail !== resultFilter) return false;
     if (reviewFilter !== 'all' && a.review_status !== reviewFilter) return false;
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedAttempts = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const openReview = async (attemptId: string) => {
     setReviewLoading(true);
@@ -738,21 +753,31 @@ export function AdminResultsPage() {
         {/* Filters */}
         <Card className="p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <Select value={testFilter} onChange={(e) => setTestFilter(e.target.value)}>
+            <div className="relative flex-1 min-w-[240px]">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search candidate name, email, or test..."
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="w-full sm:w-auto min-w-[180px]">
+              <Select value={testFilter} onChange={(e) => { setTestFilter(e.target.value); setPage(1); }}>
                 <option value="all">All Tests</option>
                 {tests.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
               </Select>
             </div>
-            <div className="flex-1 min-w-[150px]">
-              <Select value={resultFilter} onChange={(e) => setResultFilter(e.target.value)}>
+            <div className="w-full sm:w-auto min-w-[140px]">
+              <Select value={resultFilter} onChange={(e) => { setResultFilter(e.target.value); setPage(1); }}>
                 <option value="all">All Results</option>
                 <option value="pass">Pass Only</option>
                 <option value="fail">Fail Only</option>
               </Select>
             </div>
-            <div className="flex-1 min-w-[150px]">
-              <Select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value)}>
+            <div className="w-full sm:w-auto min-w-[140px]">
+              <Select value={reviewFilter} onChange={(e) => { setReviewFilter(e.target.value); setPage(1); }}>
                 <option value="all">All Statuses</option>
                 <option value="pending_review">Pending Review</option>
                 <option value="reviewed">Reviewed</option>
@@ -780,7 +805,7 @@ export function AdminResultsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filtered.map((a) => (
+                  {paginatedAttempts.map((a) => (
                     <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-5 py-3.5 text-sm font-medium text-slate-900 dark:text-white">{a.candidate_name || 'Unknown'}</td>
                       <td className="px-5 py-3.5 text-sm text-slate-600 dark:text-slate-300">{a.test_title || 'Unknown'}</td>
@@ -838,6 +863,100 @@ export function AdminResultsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                <span>
+                  Showing <strong className="text-slate-700 dark:text-slate-200">{(currentPage - 1) * pageSize + 1}</strong> to{' '}
+                  <strong className="text-slate-700 dark:text-slate-200">{Math.min(currentPage * pageSize, filtered.length)}</strong> of{' '}
+                  <strong className="text-slate-700 dark:text-slate-200">{filtered.length}</strong> results
+                </span>
+                <span className="hidden md:inline">|</span>
+                <div className="hidden md:flex items-center gap-1.5">
+                  <span>Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    className="py-1 px-2 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPage(1)}
+                  disabled={currentPage <= 1}
+                  title="First Page"
+                  className="px-2"
+                >
+                  <ChevronsLeft size={16} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  title="Previous Page"
+                  className="px-2"
+                >
+                  <ChevronLeft size={16} />
+                </Button>
+
+                <div className="flex items-center gap-1 px-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      const hasGap = prev && p - prev > 1;
+                      return (
+                        <div key={p} className="flex items-center gap-1">
+                          {hasGap && <span className="text-xs text-slate-400 px-1">...</span>}
+                          <button
+                            onClick={() => setPage(p)}
+                            className={`min-w-[28px] h-7 px-2 rounded text-xs font-medium transition-colors ${
+                              p === currentPage
+                                ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  title="Next Page"
+                  className="px-2"
+                >
+                  <ChevronRight size={16} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPage(totalPages)}
+                  disabled={currentPage >= totalPages}
+                  title="Last Page"
+                  className="px-2"
+                >
+                  <ChevronsRight size={16} />
+                </Button>
+              </div>
             </div>
           </Card>
         )}

@@ -26,11 +26,13 @@ export function CandidateDashboard() {
       { data: attemptsData },
       { data: notifData },
       { data: unlocksData },
+      { data: accessData },
     ] = await Promise.all([
       supabase.from('tests').select('*').eq('status', 'published').order('created_at', { ascending: false }),
       supabase.from('attempts').select('*').eq('candidate_id', user.id).order('submitted_at', { ascending: false }),
       supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
       supabase.from('test_unlocks').select('*').eq('candidate_id', user.id),
+      supabase.from('user_test_access').select('*').eq('user_id', user.id),
     ]);
 
     let attemptsWithTitles: AttemptWithDetails[] = [];
@@ -64,12 +66,26 @@ export function CandidateDashboard() {
       if (remaining > 0) retakeMap[u.test_id] = remaining;
     });
 
-    setTests(testsWithCounts);
+    const userRole = profile?.role || 'candidate';
+    const accessMap: Record<string, string> = {};
+    (accessData || []).forEach((acc: { test_id: string; access_type: string }) => {
+      accessMap[acc.test_id] = acc.access_type;
+    });
+
+    const eligibleTests = testsWithCounts.filter((t) => {
+      const override = accessMap[t.id];
+      if (override === 'blocked') return false; // blocked by admin
+      if (override === 'granted') return true;  // specifically released by admin
+      const target = t.target_role || 'all';
+      return target === 'all' || target === userRole;
+    });
+
+    setTests(eligibleTests);
     setAttempts(attemptsWithTitles);
     setNotifications((notifData || []) as Notification[]);
     setRetakeInfo(retakeMap);
     setLoading(false);
-  }, [user]);
+  }, [user, profile]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -141,8 +157,19 @@ export function CandidateDashboard() {
   return (
     <CandidateLayout>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">My Dashboard</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">View available certifications and your past results</p>
+        <div className="flex items-center gap-2 mb-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">
+            {profile?.role === 'worker' ? 'Worker Dashboard' : 'Candidate Dashboard'}
+          </h1>
+          <Badge color={profile?.role === 'worker' ? 'purple' : 'blue'}>
+            {profile?.role === 'worker' ? 'Worker Portal' : 'Candidate Portal'}
+          </Badge>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {profile?.role === 'worker'
+            ? 'Access your assigned worker evaluations, tests, and track your performance'
+            : 'View available certifications, complete exams, and review your results'}
+        </p>
       </div>
 
       {/* Notifications */}

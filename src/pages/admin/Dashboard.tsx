@@ -4,19 +4,20 @@ import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { AdminLayout, RouteGuard } from '@/components/layouts';
 import { Card, Spinner, Badge } from '@/components/ui';
-import { Users, FileText, TrendingUp, Activity, ArrowRight, Clock } from 'lucide-react';
+import { Users, FileText, TrendingUp, Activity, ArrowRight, Clock, Briefcase } from 'lucide-react';
 import type { AuditLog } from '@/types';
 
 export function AdminDashboard() {
   const { profile } = useAuth();
-  const [stats, setStats] = useState({ candidates: 0, tests: 0, avgScore: 0, attempts: 0 });
+  const [stats, setStats] = useState({ candidates: 0, workers: 0, tests: 0, avgScore: 0, attempts: 0 });
   const [recentActivity, setRecentActivity] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [{ data: candidates }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
+      const [{ data: candidates }, { data: workers }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
         supabase.from('profiles').select('id').eq('role', 'candidate'),
+        supabase.from('profiles').select('id').eq('role', 'worker'),
         supabase.from('tests').select('id'),
         supabase.from('attempts').select('score'),
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(8),
@@ -28,6 +29,7 @@ export function AdminDashboard() {
 
       setStats({
         candidates: candidates?.length || 0,
+        workers: workers?.length || 0,
         tests: tests?.length || 0,
         avgScore,
         attempts: attempts?.length || 0,
@@ -51,7 +53,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <Card className="p-5">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
@@ -59,7 +61,18 @@ export function AdminDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.candidates}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Total Candidates</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Candidates</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-700 dark:text-purple-300">
+                <Briefcase size={20} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.workers}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Workers</p>
               </div>
             </div>
           </Card>
@@ -99,15 +112,18 @@ export function AdminDashboard() {
         </div>
 
         {/* Quick links */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {hasPerm('can-manage-tests') && (
             <QuickLink icon={FileText} label="Manage Tests" desc="Create and edit certifications" onClick={() => navigate('/admin/tests')} />
           )}
           {hasPerm('can-manage-users') && (
-            <QuickLink icon={Users} label="Manage Users" desc="View and manage candidates" onClick={() => navigate('/admin/users')} />
+            <QuickLink icon={Users} label="Candidates" desc="View and manage candidates" onClick={() => navigate('/admin/users')} />
+          )}
+          {hasPerm('can-manage-users') && (
+            <QuickLink icon={Briefcase} label="Workers" desc="Manage worker accounts" onClick={() => navigate('/admin/workers')} />
           )}
           {hasPerm('can-view-reports') && (
-            <QuickLink icon={TrendingUp} label="View Results" desc="Scores and reports" onClick={() => navigate('/admin/results')} />
+            <QuickLink icon={TrendingUp} label="View Results" desc="Scores, grading and reports" onClick={() => navigate('/admin/results')} />
           )}
         </div>
 

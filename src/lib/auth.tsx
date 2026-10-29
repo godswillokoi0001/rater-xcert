@@ -11,7 +11,7 @@ interface AuthState {
   profileLoading: boolean;
   needsApproval: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, role?: 'candidate' | 'worker') => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -91,11 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, role: 'candidate' | 'worker' = 'candidate') => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: { data: { name, role } },
     });
     if (error) throw error;
   };
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.id);
   };
 
-  const needsApproval = !!user && !!profile && profile.role === 'candidate' && profile.status === 'pending';
+  const needsApproval = !!user && !!profile && (profile.role === 'candidate' || profile.role === 'worker') && profile.status === 'pending';
 
   return (
     <AuthContext.Provider

@@ -1,10 +1,11 @@
-export type Role = 'candidate' | 'admin' | 'super_admin';
+export type Role = 'candidate' | 'worker' | 'admin' | 'super_admin';
 export type UserStatus = 'active' | 'disabled';
 export type TestStatus = 'draft' | 'published' | 'archived';
 export type PassFail = 'pass' | 'fail';
 export type ReviewMode = 'immediate' | 'super_admin_approval';
 export type QuestionType = 'single_choice' | 'multi_select' | 'text_short' | 'text_long' | 'dropdown' | 'true_false';
 export type ScoringMode = 'all_or_nothing' | 'partial_credit';
+export type TestTargetRole = 'all' | 'candidate' | 'worker';
 
 export const PERMISSIONS = [
   'can-upload-questions',
@@ -40,6 +41,17 @@ export interface Test {
   created_at: string;
   retakes_allowed?: number;
   retake_on_fail_only?: boolean;
+  target_role?: TestTargetRole;
+}
+
+export interface UserTestAccess {
+  id: string;
+  user_id: string;
+  test_id: string;
+  access_type: 'blocked' | 'granted';
+  notes?: string;
+  created_at: string;
+  created_by?: string;
 }
 
 export interface Section {

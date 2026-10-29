@@ -1,0 +1,449 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Modal, Badge, Button, Spinner, EmptyState } from '@/components/ui';
+import type { Profile, Test, AttemptWithDetails, UserTestAccess } from '@/types';
+import {
+  FileText, Award, CheckCircle2, XCircle, Clock, ShieldAlert,
+  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check,
+} from 'lucide-react';
+
+interface UserDetailsModalProps {
+  user: Profile;
+  onClose: () => void;
+  onUserUpdated?: () => void;
+}
+
+export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsModalProps) {
+  const [activeTab, setActiveTab] = useState<'tests' | 'access'>('tests');
+  const [loading, setLoading] = useState(true);
+  const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
+  const [allTests, setAllTests] = useState<Test[]>([]);
+  const [testAccessMap, setTestAccessMap] = useState<Record<string, UserTestAccess>>({});
+  const [updatingTestId, setUpdatingTestId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const loadUserData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [
+        { data: attemptsData },
+        { data: testsData },
+        { data: accessData },
+      ] = await Promise.all([
+        supabase
+          .from('attempts')
+          .select('*')
+          .eq('candidate_id', user.id)
+          .order('submitted_at', { ascending: false }),
+        supabase
+          .from('tests')
+          .select('*')
+          .eq('status', 'published')
+          .order('title', { ascending: true }),
+        supabase
+          .from('user_test_access')
+          .select('*')
+          .eq('user_id', user.id),
+      ]);
+
+      const testTitleMap = new Map((testsData || []).map((t) => [t.id, t.title]));
+      const enrichedAttempts: AttemptWithDetails[] = (attemptsData || []).map((a) => ({
+        ...a,
+        test_title: testTitleMap.get(a.test_id) || 'Unknown Test',
+        candidate_name: user.name,
+        candidate_email: user.email,
+      }));
+
+      const accessLookup: Record<string, UserTestAccess> = {};
+      (accessData || []).forEach((item: UserTestAccess) => {
+        accessLookup[item.test_id] = item;
+      });
+
+      setAttempts(enrichedAttempts);
+      setAllTests((testsData || []) as Test[]);
+      setTestAccessMap(accessLookup);
+    } catch (err) {
+      console.error('Error loading user details:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.id, user.name, user.email]);
+
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
+
+  // Set individual test access override (block or release)
+  const handleSetAccess = async (testId: string, accessType: 'blocked' | 'granted') => {
+    setUpdatingTestId(testId);
+    try {
+      const { error } = await supabase.rpc('set_user_test_access', {
+        p_user_id: user.id,
+        p_test_id: testId,
+        p_access_type: accessType,
+        p_notes: `Admin set to ${accessType}`,
+      });
+      if (error) throw error;
+
+      setTestAccessMap((prev) => ({
+        ...prev,
+        [testId]: {
+          id: prev[testId]?.id || `temp-${Date.now()}`,
+          user_id: user.id,
+          test_id: testId,
+          access_type: accessType,
+          created_at: new Date().toISOString(),
+        },
+      }));
+      showToast(accessType === 'blocked' ? 'Test access blocked' : 'Test released to user');
+      onUserUpdated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update access');
+    } finally {
+      setUpdatingTestId(null);
+    }
+  };
+
+  // Remove individual test access override (reset to default)
+  const handleRemoveAccess = async (testId: string) => {
+    setUpdatingTestId(testId);
+    try {
+      const { error } = await supabase.rpc('remove_user_test_access', {
+        p_user_id: user.id,
+        p_test_id: testId,
+      });
+      if (error) throw error;
+
+      setTestAccessMap((prev) => {
+        const next = { ...prev };
+        delete next[testId];
+        return next;
+      });
+      showToast('Reset to default role policy');
+      onUserUpdated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to reset access');
+    } finally {
+      setUpdatingTestId(null);
+    }
+  };
+
+  // Calculate effective availability for a test
+  const getTestStatus = (test: Test) => {
+    const override = testAccessMap[test.id];
+    if (override) {
+      if (override.access_type === 'blocked') {
+        return {
+          status: 'blocked',
+          label: 'Blocked by Admin',
+          desc: 'User cannot see or take this test.',
+          badgeColor: 'red' as const,
+        };
+      }
+      if (override.access_type === 'granted') {
+        return {
+          status: 'granted',
+          label: 'Released to User',
+          desc: 'Explicitly granted access by administrator.',
+          badgeColor: 'blue' as const,
+        };
+      }
+    }
+
+    const testTarget = test.target_role || 'all';
+    if (testTarget === 'all' || testTarget === user.role) {
+      return {
+        status: 'default_available',
+        label: 'Available (Default)',
+        desc: `Available to all ${testTarget === 'all' ? 'users' : user.role + 's'}.`,
+        badgeColor: 'green' as const,
+      };
+    }
+
+    return {
+      status: 'default_ineligible',
+      label: 'Role Ineligible',
+      desc: `Restricted to ${testTarget === 'worker' ? 'Workers' : 'Candidates'}.`,
+      badgeColor: 'slate' as const,
+    };
+  };
+
+  const isWorker = user.role === 'worker';
+
+  return (
+    <Modal open={true} onClose={onClose} title="User Details & Test Management" maxWidth="max-w-4xl">
+      <div className="space-y-6">
+        {/* User Profile Header Card */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/40 dark:from-slate-800/80 dark:to-blue-950/20 border border-slate-200 dark:border-slate-700">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
+                  isWorker
+                    ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
+                    : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                }`}
+              >
+                {isWorker ? <Briefcase size={22} /> : <Users size={22} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{user.name || 'Unnamed User'}</h3>
+                  <Badge color={isWorker ? 'purple' : 'blue'}>
+                    {isWorker ? 'Worker' : 'Candidate'}
+                  </Badge>
+                  <Badge color={user.status === 'active' ? 'green' : user.status === 'pending' ? 'amber' : 'red'}>
+                    {user.status}
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                  <Mail size={13} /> {user.email || 'No email registered'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <div className="text-left sm:text-right">
+                <p className="flex items-center gap-1">
+                  <Calendar size={12} /> Joined: {new Date(user.created_at).toLocaleDateString()}
+                </p>
+                <p className="mt-0.5">
+                  Last Login: {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Toast Alert */}
+        {toastMsg && (
+          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-fade-in">
+            <Check size={16} />
+            <span>{toastMsg}</span>
+          </div>
+        )}
+
+        {/* Tab Selector */}
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('tests')}
+            className={`flex items-center gap-2 py-2 px-4 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === 'tests'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Award size={16} />
+            <span>Tests Written ({attempts.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('access')}
+            className={`flex items-center gap-2 py-2 px-4 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === 'access'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Lock size={16} />
+            <span>Test Availability & Controls ({allTests.length})</span>
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center items-center py-16">
+            <Spinner size={32} />
+          </div>
+        ) : activeTab === 'tests' ? (
+          /* Tab 1: Tests Written / Attempt History */
+          <div className="space-y-3">
+            {attempts.length === 0 ? (
+              <EmptyState
+                icon={<Award size={32} />}
+                title="No tests written yet"
+                description={`This ${isWorker ? 'worker' : 'candidate'} has not attempted or submitted any assessments so far.`}
+              />
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+                {attempts.map((att) => (
+                  <div
+                    key={att.id}
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">
+                          {att.test_title}
+                        </p>
+                        {att.pass_or_fail === 'pass' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                            <CheckCircle2 size={13} /> Pass
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                            <XCircle size={13} /> Fail
+                          </span>
+                        )}
+                        <Badge color={att.review_status === 'released' ? 'green' : 'amber'}>
+                          {att.review_status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Submitted: {att.submitted_at ? new Date(att.submitted_at).toLocaleString() : 'In Progress'} • Score:{' '}
+                        <strong className="text-slate-700 dark:text-slate-300">{Number(att.score)}%</strong> ({att.correct_answers}/{att.total_questions} correct)
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          window.location.hash = `/admin/results`;
+                          onClose();
+                        }}
+                      >
+                        <Eye size={14} /> Review in Results
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Tab 2: Test Availability & Controls */
+          <div className="space-y-3">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 text-xs sm:text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2.5">
+              <ShieldAlert size={18} className="shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Test Access & Visibility Policy</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Control which assessments this user sees on their dashboard. You can block them from tests they normally see, or explicitly release tests to them.
+                </p>
+              </div>
+            </div>
+
+            {allTests.length === 0 ? (
+              <EmptyState
+                icon={<FileText size={32} />}
+                title="No published tests"
+                description="Publish tests in the Tests tab to configure user access."
+              />
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+                {allTests.map((t) => {
+                  const state = getTestStatus(t);
+                  const isUpdating = updatingTestId === t.id;
+                  const isOverridden = !!testAccessMap[t.id];
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">{t.title}</p>
+                          <Badge color={state.badgeColor}>{state.label}</Badge>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            Target: {t.target_role === 'worker' ? 'Workers' : t.target_role === 'candidate' ? 'Candidates' : 'All'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {state.desc} • Pass Mark: {t.pass_mark}%
+                        </p>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap self-start md:self-center">
+                        {state.status === 'blocked' ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="success"
+                              disabled={isUpdating}
+                              onClick={() => handleSetAccess(t.id, 'granted')}
+                              title="Release / Grant this test to user"
+                            >
+                              <Unlock size={14} /> Release Test
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => handleRemoveAccess(t.id)}
+                              title="Reset to default role policy"
+                            >
+                              <RotateCcw size={14} /> Reset
+                            </Button>
+                          </>
+                        ) : state.status === 'granted' ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => handleSetAccess(t.id, 'blocked')}
+                              title="Block user from taking this test"
+                              className="text-red-600 dark:text-red-400 hover:text-red-700"
+                            >
+                              <Lock size={14} /> Block Test
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => handleRemoveAccess(t.id)}
+                              title="Reset to default role policy"
+                            >
+                              <RotateCcw size={14} /> Reset
+                            </Button>
+                          </>
+                        ) : state.status === 'default_available' ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={isUpdating}
+                            onClick={() => handleSetAccess(t.id, 'blocked')}
+                            title="Block user from seeing or taking this test"
+                            className="text-amber-700 dark:text-amber-400"
+                          >
+                            <Lock size={14} /> Block Test
+                          </Button>
+                        ) : (
+                          /* default_ineligible */
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={isUpdating}
+                            onClick={() => handleSetAccess(t.id, 'granted')}
+                            title="Release this test specifically to this user"
+                          >
+                            <Unlock size={14} /> Release to User
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
