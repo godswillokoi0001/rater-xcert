@@ -209,76 +209,121 @@ export function CandidateDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/40 flex items-center justify-center text-blue-700 dark:text-blue-300"><ClipboardCheck size={20} /></div>
+        <Card className="p-5 border-l-4 border-l-blue-600">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60">
+              <ClipboardCheck size={22} />
+            </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{tests.length}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Available Tests</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{tests.length}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Available Assessments</p>
             </div>
           </div>
         </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-50 dark:bg-green-900/40 flex items-center justify-center text-green-600 dark:text-green-400"><Trophy size={20} /></div>
+        <Card className="p-5 border-l-4 border-l-emerald-600">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+              <Trophy size={22} />
+            </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{passedCount}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Tests Passed</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{passedCount}</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tests Passed</p>
             </div>
           </div>
         </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400"><TrendingUp size={20} /></div>
+        <Card className="p-5 border-l-4 border-l-amber-500">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60">
+              <TrendingUp size={22} />
+            </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore}%</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Average Score</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{avgScore}%</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Average Score</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Available Tests */}
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Available Certifications</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold font-serif text-slate-900 dark:text-white tracking-tight">
+            {profile?.role === 'worker' ? 'Assigned Worker Evaluations' : 'Available Certifications'}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {profile?.role === 'worker'
+              ? 'Tests and tasks specifically allocated to your worker account'
+              : 'Official certification exams available for your candidate profile'}
+          </p>
+        </div>
+      </div>
       {tests.length === 0 ? (
         <Card className="mb-8">
-          <EmptyState icon={<ClipboardCheck size={28} />} title="No tests available" description="Check back later for new certification exams." />
+          <EmptyState
+            icon={<ClipboardCheck size={28} />}
+            title="No assessments currently available"
+            description="All eligible tests will be listed here once released by the evaluation team."
+          />
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {tests.map((test) => {
             const status = getTestStatus(test.id);
             return (
-              <Card key={test.id} className="p-5 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">{test.title}</h3>
-                    {test.description && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{test.description}</p>}
+              <Card key={test.id} className="p-5 hover:shadow-md transition-all flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-3 mb-2.5">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-base text-slate-900 dark:text-white mb-1 tracking-tight leading-snug">
+                        {test.title}
+                      </h3>
+                      {test.description && (
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                          {test.description}
+                        </p>
+                      )}
+                    </div>
+                    <Badge color={status.canTake ? 'blue' : 'amber'} dot>
+                      {test.section_count || 0} {test.section_count === 1 ? 'section' : 'sections'}
+                    </Badge>
                   </div>
-                  <Badge color={status.canTake ? 'blue' : 'amber'}>{test.section_count || 0} sections</Badge>
                 </div>
-                <div className="flex items-center justify-between mt-4">
-                  <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
-                    <span className="flex items-center gap-1"><Trophy size={14} /> Pass: {test.pass_mark}%</span>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 mt-4 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                    <span className="flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
+                      <Trophy size={13} className="text-amber-500" /> Pass: {test.pass_mark}%
+                    </span>
                     {!status.canTake && (
-                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                        {status.label === 'Awaiting Review' ? <Clock size={14} /> : <Lock size={14} />}
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                        {status.label === 'Awaiting Review' ? <Clock size={13} /> : <Lock size={13} />}
                         {status.label}
                       </span>
                     )}
                     {status.retakesRemaining !== undefined && status.retakesRemaining > 0 && (
-                      <span className="flex items-center gap-1 text-teal-600 dark:text-teal-400 font-medium">
-                        <RefreshCw size={14} /> {status.retakesRemaining === 999 ? 'Unlimited retakes' : `${status.retakesRemaining} retake${status.retakesRemaining > 1 ? 's' : ''} left`}
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <RefreshCw size={13} />{' '}
+                        {status.retakesRemaining === 999
+                          ? 'Unlimited retakes'
+                          : `${status.retakesRemaining} retake${status.retakesRemaining > 1 ? 's' : ''} left`}
                       </span>
                     )}
                   </div>
                   {status.canTake ? (
                     <Button size="sm" onClick={() => navigate(`/candidate/test/${test.id}`)}>
-                      {status.retakesRemaining ? <><RotateCcw size={14} /> Retake Test</> : <><Play size={14} /> Start Test</>}
+                      {status.retakesRemaining ? (
+                        <>
+                          <RotateCcw size={14} /> Retake Exam
+                        </>
+                      ) : (
+                        <>
+                          <Play size={14} /> Start Exam
+                        </>
+                      )}
                     </Button>
                   ) : (
                     <Button size="sm" variant="secondary" disabled>
-                      <Lock size={14} /> Locked
+                      <Lock size={14} /> {status.label || 'Unavailable'}
                     </Button>
                   )}
                 </div>

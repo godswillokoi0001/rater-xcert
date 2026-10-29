@@ -88,8 +88,8 @@ export function AdminTestsPage() {
       <AdminLayout current="/admin/tests">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">Tests & Certifications</h1>
-            <p className="text-sm text-slate-500">Create and manage certification exams</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Tests & Certifications</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Create and manage certification exams</p>
           </div>
           <Button onClick={() => setShowCreate(true)}>
             <Plus size={16} /> New Test
@@ -111,11 +111,11 @@ export function AdminTestsPage() {
                       className="flex items-center gap-3 flex-1 text-left"
                     >
                       {expandedTest === test.id ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
-                      <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
                         <FileText size={20} />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-slate-900">{test.title}</h3>
+                        <h3 className="font-semibold text-slate-900 dark:text-white">{test.title}</h3>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <Badge color={test.status === 'published' ? 'green' : test.status === 'archived' ? 'slate' : 'amber'}>
                             {test.status}

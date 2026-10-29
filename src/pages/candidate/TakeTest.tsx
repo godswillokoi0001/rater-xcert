@@ -253,15 +253,15 @@ export function TestTakingPage({ testId }: { testId: string }) {
     return !!ans.selectedOptionId;
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Spinner size={32} /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Spinner size={32} /></div>;
 
   if (blockedReason) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
         <Card className="max-w-lg w-full p-8 text-center animate-scale-in">
-          <div className="w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center bg-amber-100 text-amber-600"><Clock size={40} /></div>
-          <h1 className="text-2xl font-bold text-slate-900 font-serif mb-2">Test Not Available</h1>
-          <p className="text-slate-600 mb-6">{blockedReason}</p>
+          <div className="w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400"><Clock size={40} /></div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-2">Test Not Available</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">{blockedReason}</p>
           <Button onClick={() => navigate('/candidate')} size="lg" className="w-full">Back to Dashboard</Button>
         </Card>
       </div>
@@ -271,36 +271,36 @@ export function TestTakingPage({ testId }: { testId: string }) {
   if (result) {
     const isReleased = result.review_status === 'released';
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
         <Card className="max-w-lg w-full p-8 text-center animate-scale-in">
-          <div className={`w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center ${isReleased ? (result.pass_or_fail === 'pass' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600') : 'bg-amber-100 text-amber-600'}`}>
+          <div className={`w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center ${isReleased ? (result.pass_or_fail === 'pass' ? 'bg-green-100 dark:bg-green-950/50 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400') : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'}`}>
             {isReleased ? (result.pass_or_fail === 'pass' ? <Trophy size={40} /> : <XCircle size={40} />) : <Clock size={40} />}
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 font-serif mb-2">Test Submitted Successfully</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-2">Test Submitted Successfully</h1>
           {isReleased ? (
             <>
-              <p className="text-slate-600 mb-6">Here are your results:</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Here are your results:</p>
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="p-4 rounded-xl bg-slate-50">
-                  <p className="text-3xl font-bold text-slate-900">{result.score}%</p>
-                  <p className="text-xs text-slate-500 mt-1">Score</p>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{result.score}%</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Score</p>
                 </div>
-                <div className="p-4 rounded-xl bg-slate-50">
-                  <p className="text-3xl font-bold text-slate-900">{result.correct_answers}/{result.total_questions}</p>
-                  <p className="text-xs text-slate-500 mt-1">Correct</p>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{result.correct_answers}/{result.total_questions}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Correct</p>
                 </div>
-                <div className={`p-4 rounded-xl ${result.pass_or_fail === 'pass' ? 'bg-green-50' : 'bg-red-50'}`}>
-                  <p className={`text-3xl font-bold ${result.pass_or_fail === 'pass' ? 'text-green-600' : 'text-red-600'}`}>{result.pass_or_fail === 'pass' ? 'Pass' : 'Fail'}</p>
-                  <p className="text-xs text-slate-500 mt-1">Result</p>
+                <div className={`p-4 rounded-xl ${result.pass_or_fail === 'pass' ? 'bg-green-50 dark:bg-green-950/30 border border-green-200/50 dark:border-green-800/50' : 'bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-800/50'}`}>
+                  <p className={`text-3xl font-bold ${result.pass_or_fail === 'pass' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{result.pass_or_fail === 'pass' ? 'Pass' : 'Fail'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Result</p>
                 </div>
               </div>
             </>
           ) : (
             <>
-              <p className="text-slate-600 mb-2">Your answers have been recorded and sent for review.</p>
-              <p className="text-slate-500 text-sm mb-6">Your score will be available on your dashboard once an administrator reviews and releases your results. You will also receive an email notification.</p>
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 mb-6">
-                <p className="text-sm text-amber-700 font-medium">Status: Awaiting Admin Review</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-2">Your answers have been recorded and sent for review.</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Your score will be available on your dashboard once an administrator reviews and releases your results. You will also receive an email notification.</p>
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/50 mb-6">
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Status: Awaiting Admin Review</p>
               </div>
             </>
           )}
@@ -323,7 +323,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
       {/* Top bar */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors shadow-sm">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white"><FileText size={16} /></div>
@@ -345,7 +345,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
             const isCurrent = i === currentSectionIdx;
             const isPast = lockedSections.has(i);
             return (
-              <div key={s.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${isCurrent ? 'bg-blue-700 text-white' : isPast ? 'bg-slate-200 text-slate-500' : 'bg-slate-100 text-slate-600'}`}>
+              <div key={s.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${isCurrent ? 'bg-blue-700 text-white shadow-sm' : isPast ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400' : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400'}`}>
                 {isPast && <Lock size={12} />} Section {i + 1}: {s.title}
               </div>
             );
