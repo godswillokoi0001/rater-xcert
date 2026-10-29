@@ -447,3 +447,4 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
     </Modal>
   );
 }
+
