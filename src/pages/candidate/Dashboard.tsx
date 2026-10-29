@@ -96,55 +96,82 @@ export function CandidateDashboard() {
   const unreadNotifs = notifications.filter((n) => !n.read);
 
   const getTestStatus = (testId: string): { canTake: boolean; label: string; reason?: string; retakesRemaining?: number } => {
+    const test = tests.find((t) => t.id === testId);
     const testAttempts = attempts.filter((a) => a.test_id === testId);
     if (testAttempts.length === 0) return { canTake: true, label: 'Available' };
+
     const hasUnreleased = testAttempts.some((a) => a.review_status === 'pending_review' || a.review_status === 'reviewed');
     if (hasUnreleased) return { canTake: false, label: 'Awaiting Review', reason: 'Your previous attempt is awaiting admin review.' };
-    const hasReleased = testAttempts.some((a) => a.review_status === 'released');
-    if (hasReleased) {
-      const remaining = retakeInfo[testId];
-      if (remaining && remaining > 0) {
-        return { canTake: true, label: 'Retake Available', retakesRemaining: remaining };
+
+    const releasedAttempts = testAttempts.filter((a) => a.review_status === 'released');
+    if (releasedAttempts.length > 0) {
+      const latestAttempt = releasedAttempts[0];
+      const isFailed = latestAttempt.pass_or_fail === 'fail';
+
+      const testRetakes = test?.retakes_allowed ?? 0;
+      const failOnly = test?.retake_on_fail_only ?? true;
+
+      // Check test-level retake policy
+      if (testRetakes === -1) {
+        if (!failOnly || isFailed) {
+          return { canTake: true, label: 'Retake Available', retakesRemaining: 999 };
+        }
+      } else if (testRetakes > 0) {
+        const retakesUsed = Math.max(0, releasedAttempts.length - 1);
+        if (retakesUsed < testRetakes && (!failOnly || isFailed)) {
+          return { canTake: true, label: 'Retake Available', retakesRemaining: testRetakes - retakesUsed };
+        }
       }
-      return { canTake: false, label: 'Completed', reason: 'You have already taken this test. An admin must grant you a retake.' };
+
+      // Check manual admin unlock override
+      const manualRemaining = retakeInfo[testId];
+      if (manualRemaining && manualRemaining > 0) {
+        return { canTake: true, label: 'Retake Available', retakesRemaining: manualRemaining };
+      }
+
+      if (latestAttempt.pass_or_fail === 'pass') {
+        return { canTake: false, label: 'Passed', reason: 'You have already passed this certification exam.' };
+      }
+      return { canTake: false, label: 'Retakes Exhausted', reason: 'You have reached the maximum number of retakes for this test.' };
     }
+
     return { canTake: true, label: 'Available' };
   };
 
   return (
     <CandidateLayout>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">My Dashboard</h1>
-        <p className="text-sm text-slate-500">View available certifications and your past results</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">My Dashboard</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">View available certifications and your past results</p>
       </div>
 
       {/* Notifications */}
       {unreadNotifs.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <Bell size={16} className="text-blue-600" />
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Bell size={16} className="text-blue-600 dark:text-blue-400" />
               Notifications
               <span className="ml-1 w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">{unreadNotifs.length}</span>
             </h2>
             {unreadNotifs.length > 1 && (
-              <button onClick={dismissAllNotifications} className="text-xs text-slate-500 hover:text-slate-700 font-medium">
+              <button onClick={dismissAllNotifications} className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium">
                 Dismiss all
               </button>
             )}
           </div>
           <div className="space-y-2">
             {unreadNotifs.map((n) => (
-              <div key={n.id} className="flex items-start gap-3 p-4 rounded-xl bg-blue-50/70 border border-blue-100 animate-slide-in">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5">
+              <div key={n.id} className="flex items-start gap-3 p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 animate-slide-in">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/60 flex items-center justify-center text-blue-600 dark:text-blue-300 shrink-0 mt-0.5">
                   {n.type === 'result_released' ? <Trophy size={16} /> : <Bell size={16} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">{n.title}</p>
-                  <p className="text-sm text-slate-600 mt-0.5">{n.message}</p>
-                  <p className="text-xs text-slate-400 mt-1">{new Date(n.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{n.title}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 mt-0.5">{n.message}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{new Date(n.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
                 </div>
-                <button onClick={() => dismissNotification(n.id)} className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+                <button onClick={() => dismissNotification(n.id)} className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0">
                   <X size={14} />
                 </button>
               </div>
@@ -157,35 +184,35 @@ export function CandidateDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <Card className="p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700"><ClipboardCheck size={20} /></div>
+            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/40 flex items-center justify-center text-blue-700 dark:text-blue-300"><ClipboardCheck size={20} /></div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">{tests.length}</p>
-              <p className="text-xs text-slate-500">Available Tests</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{tests.length}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Available Tests</p>
             </div>
           </div>
         </Card>
         <Card className="p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600"><Trophy size={20} /></div>
+            <div className="w-10 h-10 rounded-lg bg-green-50 dark:bg-green-900/40 flex items-center justify-center text-green-600 dark:text-green-400"><Trophy size={20} /></div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">{passedCount}</p>
-              <p className="text-xs text-slate-500">Tests Passed</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{passedCount}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Tests Passed</p>
             </div>
           </div>
         </Card>
         <Card className="p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600"><TrendingUp size={20} /></div>
+            <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400"><TrendingUp size={20} /></div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">{avgScore}%</p>
-              <p className="text-xs text-slate-500">Average Score</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore}%</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Average Score</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Available Tests */}
-      <h2 className="text-lg font-semibold text-slate-900 mb-4">Available Certifications</h2>
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Available Certifications</h2>
       {tests.length === 0 ? (
         <Card className="mb-8">
           <EmptyState icon={<ClipboardCheck size={28} />} title="No tests available" description="Check back later for new certification exams." />
@@ -198,23 +225,23 @@ export function CandidateDashboard() {
               <Card key={test.id} className="p-5 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 mb-1">{test.title}</h3>
-                    {test.description && <p className="text-sm text-slate-500 line-clamp-2">{test.description}</p>}
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">{test.title}</h3>
+                    {test.description && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{test.description}</p>}
                   </div>
                   <Badge color={status.canTake ? 'blue' : 'amber'}>{test.section_count || 0} sections</Badge>
                 </div>
                 <div className="flex items-center justify-between mt-4">
-                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
                     <span className="flex items-center gap-1"><Trophy size={14} /> Pass: {test.pass_mark}%</span>
                     {!status.canTake && (
-                      <span className="flex items-center gap-1 text-amber-600 font-medium">
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
                         {status.label === 'Awaiting Review' ? <Clock size={14} /> : <Lock size={14} />}
                         {status.label}
                       </span>
                     )}
-                    {status.retakesRemaining && (
-                      <span className="flex items-center gap-1 text-teal-600 font-medium">
-                        <RefreshCw size={14} /> {status.retakesRemaining} retake{status.retakesRemaining > 1 ? 's' : ''} remaining
+                    {status.retakesRemaining !== undefined && status.retakesRemaining > 0 && (
+                      <span className="flex items-center gap-1 text-teal-600 dark:text-teal-400 font-medium">
+                        <RefreshCw size={14} /> {status.retakesRemaining === 999 ? 'Unlimited retakes' : `${status.retakesRemaining} retake${status.retakesRemaining > 1 ? 's' : ''} left`}
                       </span>
                     )}
                   </div>
@@ -235,7 +262,7 @@ export function CandidateDashboard() {
       )}
 
       {/* Past Attempts */}
-      <h2 className="text-lg font-semibold text-slate-900 mb-4">Past Attempts</h2>
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Past Attempts</h2>
       {attempts.length === 0 ? (
         <Card>
           <EmptyState icon={<Calendar size={28} />} title="No attempts yet" description="Your completed exam results will appear here." />
@@ -245,71 +272,71 @@ export function CandidateDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Test</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Score</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Result</th>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Test</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Date</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Score</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Result</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {attempts.map((a) => {
                   const isExpanded = expandedAttempt === a.id;
                   const hasNotes = a.review_status === 'released' && a.admin_notes && a.admin_notes.trim().length > 0;
                   return (
                     <>
-                      <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-5 py-3.5 text-sm font-medium text-slate-900">{a.test_title}</td>
-                        <td className="px-5 py-3.5 text-sm text-slate-500">
+                      <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-5 py-3.5 text-sm font-medium text-slate-900 dark:text-white">{a.test_title}</td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400">
                           {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '---'}
                         </td>
                         <td className="px-5 py-3.5">
                           {a.review_status === 'pending_review' && (
-                            <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-600"><Clock size={14} /> Awaiting Review</span>
+                            <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400"><Clock size={14} /> Awaiting Review</span>
                           )}
                           {a.review_status === 'reviewed' && (
-                            <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600"><Eye size={14} /> Under Review</span>
+                            <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400"><Eye size={14} /> Under Review</span>
                           )}
                           {a.review_status === 'released' && (
-                            <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600"><CheckCircle2 size={14} /> Released</span>
+                            <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-400"><CheckCircle2 size={14} /> Released</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-slate-700">
+                        <td className="px-5 py-3.5 text-sm text-slate-700 dark:text-slate-300 font-medium">
                           {a.review_status === 'released' ? (
-                            <>{Number(a.score)}% <span className="text-slate-400">({a.correct_answers}/{a.total_questions})</span></>
+                            <>{Number(a.score)}% <span className="text-slate-400 dark:text-slate-500 font-normal">({a.correct_answers}/{a.total_questions})</span></>
                           ) : (
-                            <span className="text-slate-400 italic">Hidden until released</span>
+                            <span className="text-slate-400 dark:text-slate-500 italic">Hidden until released</span>
                           )}
                         </td>
                         <td className="px-5 py-3.5">
                           {a.review_status === 'released' ? (
                             a.pass_or_fail === 'pass' ? (
-                              <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600"><CheckCircle2 size={16} /> Pass</span>
+                              <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-400"><CheckCircle2 size={16} /> Pass</span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-sm font-medium text-red-600"><XCircle size={16} /> Fail</span>
+                              <span className="inline-flex items-center gap-1 text-sm font-medium text-red-600 dark:text-red-400"><XCircle size={16} /> Fail</span>
                             )
                           ) : (
-                            <span className="text-slate-400 italic">Pending</span>
+                            <span className="text-slate-400 dark:text-slate-500 italic">Pending</span>
                           )}
                         </td>
                         <td className="px-3 py-3.5">
                           {hasNotes && (
-                            <button onClick={() => setExpandedAttempt(isExpanded ? null : a.id)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                            <button onClick={() => setExpandedAttempt(isExpanded ? null : a.id)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                           )}
                         </td>
                       </tr>
                       {isExpanded && hasNotes && (
-                        <tr key={`${a.id}-notes`} className="bg-slate-50/50">
+                        <tr key={`${a.id}-notes`} className="bg-slate-50/50 dark:bg-slate-800/30">
                           <td colSpan={6} className="px-5 py-3">
                             <div className="flex items-start gap-2 pl-2">
                               <MessageSquare size={14} className="text-slate-400 mt-0.5 shrink-0" />
                               <div>
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Admin Notes</p>
-                                <p className="text-sm text-slate-700">{a.admin_notes}</p>
+                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Admin Notes</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-300">{a.admin_notes}</p>
                               </div>
                             </div>
                           </td>

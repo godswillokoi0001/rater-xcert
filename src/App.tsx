@@ -1,4 +1,5 @@
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { ThemeProvider } from '@/lib/theme';
 import { useHashRoute, navigate } from '@/lib/router';
 import { LoadingScreen } from '@/components/layouts';
 import { LandingPage } from '@/pages/Landing';
@@ -85,9 +86,11 @@ function Router() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Router />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

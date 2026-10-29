@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
-import { Button, Spinner } from '@/components/ui';
+import { ThemeToggle } from '@/lib/theme';
+import { Spinner } from '@/components/ui';
 import { ClipboardCheck, LogOut, LayoutDashboard, FileText, Users, ShieldCheck, BarChart3, ScrollText, GraduationCap } from 'lucide-react';
 import type { Role } from '@/types';
 
 export function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       <Spinner size={32} />
     </div>
   );
@@ -54,15 +55,15 @@ export function AdminLayout({ children, current }: { children: ReactNode; curren
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors">
       {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col fixed h-screen">
-        <div className="px-5 py-4 border-b border-slate-200">
+      <aside className="w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col fixed h-screen z-30 transition-colors">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <button onClick={() => navigate('/')} className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white">
               <ClipboardCheck size={18} />
             </div>
-            <span className="font-bold text-slate-900 font-serif">Rater X</span>
+            <span className="font-bold text-slate-900 dark:text-white font-serif">Rater X</span>
           </button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -73,7 +74,9 @@ export function AdminLayout({ children, current }: { children: ReactNode; curren
                 key={item.path}
                 onClick={() => navigate(item.path)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'
+                  active
+                    ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 <item.icon size={18} />
@@ -82,14 +85,18 @@ export function AdminLayout({ children, current }: { children: ReactNode; curren
             );
           })}
         </nav>
-        <div className="px-3 py-4 border-t border-slate-200">
-          <div className="px-3 py-2 mb-2">
-            <p className="text-sm font-medium text-slate-900 truncate">{profile.name || 'Admin'}</p>
-            <p className="text-xs text-slate-500 truncate">{isSuper ? 'Super Admin' : 'Administrator'}</p>
+        <div className="px-3 py-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="flex items-center justify-between px-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Theme</span>
+            <ThemeToggle />
+          </div>
+          <div className="px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{profile.name || 'Admin'}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{isSuper ? 'Super Admin' : 'Administrator'}</p>
           </div>
           <button
             onClick={async () => { await signOut(); navigate('/'); }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-600 dark:hover:text-red-400 transition-colors"
           >
             <LogOut size={18} /> Sign Out
           </button>
@@ -109,26 +116,28 @@ export function CandidateLayout({ children }: { children: ReactNode }) {
   if (!profile) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={() => navigate('/candidate')} className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white">
               <ClipboardCheck size={18} />
             </div>
-            <span className="font-bold text-slate-900 font-serif">Rater X</span>
+            <span className="font-bold text-slate-900 dark:text-white font-serif">Rater X</span>
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-slate-900">{profile.name || 'Candidate'}</p>
-              <p className="text-xs text-slate-500">Candidate</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{profile.name || 'Candidate'}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Candidate</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700">
+            <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
               <GraduationCap size={18} />
             </div>
             <button
               onClick={async () => { await signOut(); navigate('/'); }}
-              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              title="Sign Out"
             >
               <LogOut size={18} />
             </button>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
+import { ThemeToggle } from '@/lib/theme';
 import { Button, Input, Label, Spinner } from '@/components/ui';
 import { GraduationCap, ShieldCheck, Mail, Lock, User, ArrowLeft, AlertCircle } from 'lucide-react';
 
@@ -24,7 +25,6 @@ export function AuthPage({ mode }: { mode: Mode }) {
       } else {
         await signIn(email, password);
       }
-      // The router will redirect based on auth state and role.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -42,26 +42,29 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const { title, subtitle } = titles[mode];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20 transition-colors">
       <div className="w-full max-w-md">
-        <button
-          onClick={() => navigate('/')}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors"
-        >
-          <ArrowLeft size={16} /> Back to home
-        </button>
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          >
+            <ArrowLeft size={16} /> Back to home
+          </button>
+          <ThemeToggle />
+        </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 animate-fade-in">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 animate-fade-in transition-colors">
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-blue-700 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-700/20">
               {mode === 'admin-login' || mode === 'bootstrap' ? <ShieldCheck size={28} /> : <GraduationCap size={28} />}
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 font-serif">{title}</h1>
-            <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">{title}</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 text-center">{subtitle}</p>
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 animate-fade-in">
+            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300 animate-fade-in">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -120,25 +123,25 @@ export function AuthPage({ mode }: { mode: Mode }) {
           </form>
 
           {mode === 'admin-login' && (
-            <p className="text-center text-sm text-slate-500 mt-6">
+            <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
               First time setup?{' '}
-              <button onClick={() => navigate('/bootstrap')} className="text-blue-600 font-medium hover:text-blue-700">
+              <button onClick={() => navigate('/bootstrap')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
                 Create super admin
               </button>
             </p>
           )}
           {mode === 'candidate-login' && (
-            <p className="text-center text-sm text-slate-500 mt-6">
+            <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
               Don't have an account?{' '}
-              <button onClick={() => navigate('/signup')} className="text-blue-600 font-medium hover:text-blue-700">
+              <button onClick={() => navigate('/signup')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
                 Sign up
               </button>
             </p>
           )}
           {mode === 'candidate-signup' && (
-            <p className="text-center text-sm text-slate-500 mt-6">
+            <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
               Already have an account?{' '}
-              <button onClick={() => navigate('/login')} className="text-blue-600 font-medium hover:text-blue-700">
+              <button onClick={() => navigate('/login')} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
                 Sign in
               </button>
             </p>
@@ -162,8 +165,6 @@ export function BootstrapPage() {
     setError('');
     setLoading(true);
     try {
-      const { callAdminApi } = await import('@/lib/supabase');
-      // For bootstrap, we don't need auth — the edge function checks if super_admin exists
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const res = await fetch(`${supabaseUrl}/functions/v1/admin-api/bootstrap`, {
         method: 'POST',
@@ -182,13 +183,13 @@ export function BootstrapPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 max-w-md w-full text-center animate-scale-in">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-green-600 mx-auto mb-4">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 max-w-md w-full text-center animate-scale-in">
+          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-300 mx-auto mb-4">
             <ShieldCheck size={32} />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Super Admin Created</h2>
-          <p className="text-sm text-slate-600 mb-6">Your super admin account is ready. You can now sign in to manage the platform.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Super Admin Created</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">Your super admin account is ready. You can now sign in to manage the platform.</p>
           <Button onClick={() => navigate('/admin')} className="w-full">Go to Admin Sign In</Button>
         </div>
       </div>
@@ -196,21 +197,24 @@ export function BootstrapPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/20">
       <div className="w-full max-w-md">
-        <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors">
-          <ArrowLeft size={16} /> Back to home
-        </button>
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 animate-fade-in">
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+            <ArrowLeft size={16} /> Back to home
+          </button>
+          <ThemeToggle />
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 animate-fade-in">
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-blue-700 flex items-center justify-center text-white mb-3 shadow-lg shadow-blue-700/20">
               <ShieldCheck size={28} />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 font-serif">Create Super Admin</h1>
-            <p className="text-sm text-slate-500 mt-1">Set up the first administrator account</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">Create Super Admin</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Set up the first administrator account</p>
           </div>
           {error && (
-            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>

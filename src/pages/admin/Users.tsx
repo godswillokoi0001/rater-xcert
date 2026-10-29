@@ -55,8 +55,8 @@ export function AdminUsersPage() {
     <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/users">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">User Management</h1>
-          <p className="text-sm text-slate-500">View, edit, and manage candidate accounts</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">User Management</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">View, edit, and manage candidate accounts</p>
         </div>
 
         <Card className="p-4 mb-4">
@@ -68,7 +68,7 @@ export function AdminUsersPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
@@ -85,35 +85,35 @@ export function AdminUsersPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider hidden sm:table-cell">Status</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider hidden md:table-cell">Joined</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider hidden lg:table-cell">Last Login</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden sm:table-cell">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">Joined</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Last Login</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filtered.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-medium">
+                          <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950/60 flex items-center justify-center text-blue-700 dark:text-blue-300 text-sm font-medium">
                             {p.name?.charAt(0).toUpperCase() || '?'}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{p.name || 'Unnamed'}</p>
-                            <p className="text-xs text-slate-500 flex items-center gap-1"><Mail size={10} /> {p.email || '—'}</p>
+                            <p className="text-sm font-medium text-slate-900 dark:text-white">{p.name || 'Unnamed'}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Mail size={10} /> {p.email || '—'}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-5 py-3.5 hidden sm:table-cell">
                         <Badge color={p.status === 'active' ? 'green' : p.status === 'pending' ? 'amber' : 'red'}>{p.status}</Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">
+                      <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400 hidden md:table-cell">
                         {new Date(p.created_at).toLocaleDateString()}
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500 hidden lg:table-cell">
+                      <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400 hidden lg:table-cell">
                         {p.last_login ? new Date(p.last_login).toLocaleDateString() : 'Never'}
                       </td>
                       <td className="px-5 py-3.5">
@@ -171,7 +171,7 @@ function EditNameModal({ profile, onClose, onSaved }: { profile: Profile; onClos
     <Modal open={true} onClose={onClose} title="Edit User Name">
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="flex justify-end gap-3 pt-2">

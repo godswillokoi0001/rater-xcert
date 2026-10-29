@@ -18,6 +18,17 @@
   --ch-border: #e2e8f0;
 }
 
+html.dark {
+  --ch-primary: #3b82f6;
+  --ch-primary-light: #60a5fa;
+  --ch-primary-dark: #1d4ed8;
+  --ch-ink: #f8fafc;
+  --ch-slate: #94a3b8;
+  --ch-mist: #0f172a;
+  --ch-border: #334155;
+  color-scheme: dark;
+}
+
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -27,6 +38,12 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: #f8fafc;
   color: var(--ch-ink);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark body {
+  background: #090e17;
+  color: #f1f5f9;
 }
 
 .font-serif {
@@ -38,6 +55,9 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+html.dark ::-webkit-scrollbar-thumb { background: #334155; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 /* Animations */
 @keyframes fadeIn {
@@ -70,4 +90,45 @@ body {
 .timer-urgent {
   color: #dc2626;
   animation: pulse-ring 1.5s infinite;
+}
+
+/* Print Styles for PDF Result Export */
+@media print {
+  @page {
+    size: auto;
+    margin: 12mm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  aside,
+  header,
+  nav,
+  .no-print,
+  button,
+  .print-hide {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .printable-result-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
 }

@@ -33,8 +33,8 @@ export function AdminAuditPage() {
     <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/audit">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">Audit Log</h1>
-          <p className="text-sm text-slate-500">Track every administrative action</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Audit Log</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Track every administrative action</p>
         </div>
 
         <Card className="p-4 mb-4">
@@ -59,24 +59,24 @@ export function AdminAuditPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Admin</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Action</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider hidden sm:table-cell">Entity</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider hidden md:table-cell">Details</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">When</th>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Admin</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Action</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden sm:table-cell">Entity</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">Details</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">When</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filtered.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-3.5 text-sm font-medium text-slate-900">{log.admin_name || 'Unknown'}</td>
-                      <td className="px-5 py-3.5 text-sm text-slate-700">{log.action.replace(/_/g, ' ')}</td>
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-5 py-3.5 text-sm font-medium text-slate-900 dark:text-white">{log.admin_name || 'Unknown'}</td>
+                      <td className="px-5 py-3.5 text-sm text-slate-700 dark:text-slate-200">{log.action.replace(/_/g, ' ')}</td>
                       <td className="px-5 py-3.5 hidden sm:table-cell"><Badge color="slate">{log.entity_type}</Badge></td>
-                      <td className="px-5 py-3.5 text-xs text-slate-500 hidden md:table-cell max-w-xs truncate">
+                      <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 hidden md:table-cell max-w-xs truncate">
                         {Object.keys(log.details || {}).length > 0 ? JSON.stringify(log.details) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500">
+                      <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400">
                         {new Date(log.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
                     </tr>

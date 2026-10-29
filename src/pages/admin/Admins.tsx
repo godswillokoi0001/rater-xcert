@@ -46,8 +46,8 @@ export function AdminAdminsPage() {
       <AdminLayout current="/admin/admins">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">Admin Management</h1>
-            <p className="text-sm text-slate-500">Create admin accounts and manage permissions</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Admin Management</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Create admin accounts and manage permissions</p>
           </div>
           <Button onClick={() => setShowCreate(true)}>
             <Plus size={16} /> New Admin
@@ -62,16 +62,16 @@ export function AdminAdminsPage() {
               <Card key={p.id} className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${p.role === 'super_admin' ? 'bg-slate-800 text-white' : 'bg-blue-100 text-blue-700'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${p.role === 'super_admin' ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'}`}>
                       {p.name?.charAt(0).toUpperCase() || '?'}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{p.name || 'Unnamed'}</p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{p.name || 'Unnamed'}</p>
                         <Badge color={p.role === 'super_admin' ? 'slate' : 'blue'}>{p.role === 'super_admin' ? 'Super Admin' : 'Admin'}</Badge>
                         {p.status === 'disabled' && <Badge color="red">disabled</Badge>}
                       </div>
-                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Mail size={10} /> {p.email || '—'}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5"><Mail size={10} /> {p.email || '—'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -82,7 +82,7 @@ export function AdminAdminsPage() {
                             <span className="text-xs text-slate-400">No permissions</span>
                           ) : (
                             p.permissions.map((perm) => (
-                              <span key={perm} className="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-600">{perm.replace('can-', '').replace('-', ' ')}</span>
+                              <span key={perm} className="px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{perm.replace('can-', '').replace('-', ' ')}</span>
                             ))
                           )}
                         </div>
@@ -164,14 +164,14 @@ function CreateAdminModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
           <Label>Permissions</Label>
           <div className="space-y-2">
             {PERMISSIONS.map((perm) => (
-              <label key={perm} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+              <label key={perm} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
                 <input
                   type="checkbox"
                   checked={permissions.includes(perm)}
                   onChange={() => togglePerm(perm)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm text-slate-700">{perm.replace(/-/g, ' ').replace('can ', '')}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-200">{perm.replace(/-/g, ' ').replace('can ', '')}</span>
               </label>
             ))}
           </div>
@@ -209,14 +209,14 @@ function PermissionsModal({ profile, onClose, onSaved }: { profile: Profile; onC
           <Label>Grant Permissions</Label>
           <div className="space-y-2">
             {PERMISSIONS.map((perm) => (
-              <label key={perm} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+              <label key={perm} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
                 <input
                   type="checkbox"
                   checked={permissions.includes(perm)}
                   onChange={() => togglePerm(perm)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm text-slate-700 capitalize">{perm.replace(/-/g, ' ').replace('can ', '')}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-200 capitalize">{perm.replace(/-/g, ' ').replace('can ', '')}</span>
               </label>
             ))}
           </div>

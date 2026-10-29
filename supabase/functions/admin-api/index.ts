@@ -134,8 +134,8 @@ Deno.serve(async (req: Request) => {
 
     // Route: POST /create-admin — super_admin creates a new admin account
     if (path === "create-admin" && method === "POST") {
-      if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: "Super admin access required" }), {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -233,8 +233,8 @@ Deno.serve(async (req: Request) => {
 
     // Route: GET /review-attempt — super_admin gets full attempt details with answers
     if (path === "review-attempt" && method === "GET") {
-      if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: "Super admin access required" }), {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -339,8 +339,8 @@ Deno.serve(async (req: Request) => {
 
     // Route: POST /release-attempt — super_admin releases score to candidate + sends email
     if (path === "release-attempt" && method === "POST") {
-      if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: "Super admin access required" }), {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -506,8 +506,8 @@ Deno.serve(async (req: Request) => {
 
     // Route: POST /grant-retake — super_admin grants retake to a candidate
     if (path === "grant-retake" && method === "POST") {
-      if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: "Super admin access required" }), {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

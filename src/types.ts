@@ -27,6 +27,8 @@ export interface Profile {
   email_verified: boolean;
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 export interface Test {
   id: string;
   title: string;
@@ -36,6 +38,8 @@ export interface Test {
   pass_mark: number;
   review_mode: ReviewMode;
   created_at: string;
+  retakes_allowed?: number;
+  retake_on_fail_only?: boolean;
 }
 
 export interface Section {
@@ -83,6 +87,9 @@ export interface Answer {
   selected_option_id: string | null;
   selected_option_ids?: string[];
   text_answer?: string;
+  manual_grade?: 'correct' | 'incorrect' | 'partial';
+  manual_score?: number; // e.g. 1 for full, 0 for incorrect, 0.5 for partial
+  manual_feedback?: string;
 }
 
 export type ReviewStatus = 'pending_review' | 'reviewed' | 'released';

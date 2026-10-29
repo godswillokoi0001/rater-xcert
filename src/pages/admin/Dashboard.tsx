@@ -46,53 +46,53 @@ export function AdminDashboard() {
     <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/dashboard">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 font-serif mb-1">Dashboard</h1>
-          <p className="text-sm text-slate-500">Platform overview and recent activity</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Dashboard</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Platform overview and recent activity</p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
                 <Users size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900">{stats.candidates}</p>
-                <p className="text-xs text-slate-500">Total Candidates</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.candidates}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Candidates</p>
               </div>
             </div>
           </Card>
           <Card className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-700">
+              <div className="w-10 h-10 rounded-lg bg-cyan-50 dark:bg-cyan-950/50 flex items-center justify-center text-cyan-700 dark:text-cyan-300">
                 <FileText size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900">{stats.tests}</p>
-                <p className="text-xs text-slate-500">Total Tests</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.tests}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Tests</p>
               </div>
             </div>
           </Card>
           <Card className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+              <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-300">
                 <TrendingUp size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900">{stats.avgScore}%</p>
-                <p className="text-xs text-slate-500">Average Score</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.avgScore}%</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Average Score</p>
               </div>
             </div>
           </Card>
           <Card className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
+              <div className="w-10 h-10 rounded-lg bg-green-50 dark:bg-green-950/50 flex items-center justify-center text-green-600 dark:text-green-300">
                 <Activity size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900">{stats.attempts}</p>
-                <p className="text-xs text-slate-500">Total Attempts</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.attempts}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Attempts</p>
               </div>
             </div>
           </Card>
@@ -112,25 +112,25 @@ export function AdminDashboard() {
         </div>
 
         {/* Recent activity */}
-        <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
           <Clock size={18} className="text-slate-400" /> Recent Activity
         </h2>
         {recentActivity.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-slate-500">No recent activity</Card>
+          <Card className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">No recent activity</Card>
         ) : (
           <Card className="overflow-hidden">
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentActivity.map((log) => (
-                <div key={log.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div key={log.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
                       <Activity size={14} />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">
-                        <span className="text-slate-600">{log.admin_name}</span> {formatAction(log.action)}
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        <span className="text-slate-600 dark:text-slate-400">{log.admin_name}</span> {formatAction(log.action)}
                       </p>
-                      <p className="text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(log.created_at).toLocaleString()}</p>
                     </div>
                   </div>
                   <Badge color="slate">{log.entity_type}</Badge>
@@ -146,16 +146,16 @@ export function AdminDashboard() {
 
 function QuickLink({ icon: Icon, label, desc, onClick }: { icon: typeof FileText; label: string; desc: string; onClick: () => void }) {
   return (
-    <Card className="p-5 cursor-pointer hover:shadow-md transition-shadow" >
+    <Card className="p-5 cursor-pointer hover:shadow-md transition-shadow">
       <button onClick={onClick} className="w-full text-left">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-700 dark:text-blue-300">
               <Icon size={20} />
             </div>
             <div>
-              <p className="font-semibold text-slate-900">{label}</p>
-              <p className="text-xs text-slate-500">{desc}</p>
+              <p className="font-semibold text-slate-900 dark:text-white">{label}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
             </div>
           </div>
           <ArrowRight size={18} className="text-slate-400" />
