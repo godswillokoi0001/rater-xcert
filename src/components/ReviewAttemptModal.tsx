@@ -338,7 +338,11 @@ export function ReviewAttemptModal({
               <div>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold font-serif text-slate-900 dark:text-white">
-                    Review & Grade Attempt
+                    {reviewData.attempt.review_status === 'released'
+                      ? 'Assessment Result Details'
+                      : reviewData.attempt.review_status === 'reviewed'
+                      ? 'Assessment Review Record'
+                      : 'Review & Grade Attempt'}
                   </h2>
                   <Badge color={reviewData.attempt.review_status === 'released' ? 'green' : 'amber'}>
                     {reviewData.attempt.review_status.replace('_', ' ')}
@@ -802,3 +806,4 @@ export function ReviewAttemptModal({
     </div>
   );
 }
+

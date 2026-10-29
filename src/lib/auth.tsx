@@ -110,23 +110,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string, role: 'candidate' | 'worker' = 'candidate') => {
-    const { data: authData, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name, role } },
-    });
-    if (error) throw error;
+    let registeredViaApi = false;
 
-    if (authData?.user) {
-      try {
-        await supabase
-          .from('profiles')
-          .update({ role, name })
-          .eq('id', authData.user.id);
-      } catch {}
-      try {
-        await supabase.rpc('claim_my_role', { p_role: role });
-      } catch {}
+    // Primary: Register via admin-api edge function with service_role key to guarantee target role is saved in profiles
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email, password, name, role }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        registeredViaApi = true;
+        // Sign in immediately to create session
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) throw signInErr;
+        return;
+      }
+      if (!res.ok && data.error && !data.error.includes('FunctionsFetchError')) {
+        // Validation or duplicate user error from API
+        throw new Error(data.error);
+      }
+    } catch (apiErr) {
+      if (apiErr instanceof Error && (apiErr.message.includes('already exists') || apiErr.message.includes('already registered'))) {
+        throw apiErr;
+      }
+      // If network failure or edge function not yet deployed, continue to client fallback
+    }
+
+    if (!registeredViaApi) {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name, role } },
+      });
+      if (error) throw error;
+
+      if (authData?.user) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ role, name })
+            .eq('id', authData.user.id);
+        } catch {}
+        try {
+          await supabase.rpc('claim_my_role', { p_role: role });
+        } catch {}
+      }
     }
   };
 

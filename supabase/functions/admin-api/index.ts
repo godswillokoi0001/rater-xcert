@@ -72,6 +72,54 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Route: POST /register — public registration for candidate or worker with guaranteed role persistence
+    if (path === "register" && method === "POST") {
+      const { email, password, name, role } = await req.json();
+      if (!email || !password) {
+        return new Response(JSON.stringify({ error: "Email and password required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const targetRole = role === "worker" ? "worker" : "candidate";
+
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      // Create user via admin API with pre-confirmed email
+      const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
+        email: email.trim(),
+        password,
+        email_confirm: true,
+        user_metadata: { name: name?.trim() || email.split("@")[0], role: targetRole },
+      });
+
+      if (createErr || !newUser.user) {
+        return new Response(JSON.stringify({ error: createErr?.message || "Registration failed" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Upsert profile directly using service_role key to ensure targetRole ('worker' or 'candidate') is stored!
+      await adminClient
+        .from("profiles")
+        .upsert({
+          id: newUser.user.id,
+          name: name?.trim() || email.split("@")[0],
+          role: targetRole,
+          status: "pending",
+          permissions: [],
+          email_verified: true,
+        });
+
+      return new Response(JSON.stringify({ success: true, id: newUser.user.id, role: targetRole }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // All routes below require authentication
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

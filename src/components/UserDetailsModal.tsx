@@ -346,13 +346,25 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
-                      <Button
-                        size="sm"
-                        onClick={() => setSelectedAttemptIdForReview(att.id)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        <Eye size={14} /> Review & Grade
-                      </Button>
+                      {att.review_status === 'pending_review' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedAttemptIdForReview(att.id)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                          title="Awaiting examiner review and manual grading"
+                        >
+                          <Clock size={14} /> Review & Grade
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setSelectedAttemptIdForReview(att.id)}
+                          title="View assessment result details"
+                        >
+                          <FileText size={14} /> View Result
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="secondary"

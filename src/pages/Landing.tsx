@@ -34,12 +34,18 @@ export function LandingPage() {
             ) : (
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
-                  onClick={() => navigate('/login')}
-                  className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-1.5 rounded-lg transition-colors"
+                  onClick={() => navigate('/worker/login')}
+                  className="text-xs sm:text-sm font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                 >
-                  Sign In
+                  <Briefcase size={14} /> Worker Portal
                 </button>
-                <Button size="sm" onClick={() => navigate('/signup')}>
+                <button
+                  onClick={() => navigate('/candidate/login')}
+                  className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <GraduationCap size={14} /> Candidate Portal
+                </button>
+                <Button size="sm" onClick={() => navigate('/candidate/signup')}>
                   Get Started <ArrowRight size={14} />
                 </Button>
               </div>
@@ -67,11 +73,11 @@ export function LandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3.5 justify-center max-w-md mx-auto">
-              <Button size="lg" onClick={() => navigate('/signup')} className="w-full sm:w-auto">
-                Register as Candidate or Worker <ArrowRight size={16} />
+              <Button size="lg" onClick={() => navigate('/candidate/signup')} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white">
+                <GraduationCap size={16} /> Candidate Sign Up
               </Button>
-              <Button size="lg" variant="secondary" onClick={() => navigate('/login')} className="w-full sm:w-auto">
-                Sign In
+              <Button size="lg" variant="secondary" onClick={() => navigate('/worker/signup')} className="w-full sm:w-auto border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40">
+                <Briefcase size={16} /> Worker Sign Up
               </Button>
             </div>
 
@@ -107,9 +113,15 @@ export function LandingPage() {
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
               Access scheduled certifications, view pass/fail statistics, retake assessments when allowed by test policy, and print accredited PDF credentials.
             </p>
-            <button onClick={() => navigate('/candidate/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
-              Join as Candidate <ArrowRight size={14} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigate('/candidate/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                Join as Candidate <ArrowRight size={14} />
+              </button>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <button onClick={() => navigate('/candidate/login')} className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
+                Sign In
+              </button>
+            </div>
           </div>
 
           <div className="p-6 rounded-2xl border border-purple-200/80 dark:border-purple-900/60 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/20 dark:from-purple-950/40 dark:via-slate-900 dark:to-slate-900 shadow-xs">
@@ -120,9 +132,15 @@ export function LandingPage() {
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
               Specialized evaluation tracks for staff and contractors. Complete verification tests, timed challenges, and track performance records with complete transparency.
             </p>
-            <button onClick={() => navigate('/worker/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 hover:underline">
-              Join as Worker <ArrowRight size={14} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigate('/worker/signup')} className="inline-flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 hover:underline">
+                Join as Worker <ArrowRight size={14} />
+              </button>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <button onClick={() => navigate('/worker/login')} className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
+                Sign In
+              </button>
+            </div>
           </div>
         </div>
 
@@ -151,10 +169,18 @@ export function LandingPage() {
             <img src="/logo.18142vv4cndxn.svg" alt="Rater X" className="h-7 w-auto" />
             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">© {new Date().getFullYear()} Rater-X Evaluation Platform. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium text-slate-500 flex-wrap">
+            <button onClick={() => navigate('/candidate/login')} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+              Candidate Portal
+            </button>
+            <span>•</span>
+            <button onClick={() => navigate('/worker/login')} className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+              Worker Portal
+            </button>
+            <span>•</span>
             <button
               onClick={() => navigate('/admin/login')}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors font-semibold"
+              className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors font-semibold"
               title="Administrator access"
             >
               <Lock size={12} /> Admin Portal

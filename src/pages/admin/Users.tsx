@@ -170,25 +170,14 @@ export function AdminUsersPage() {
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {writtenCount > 0 ? (
-                              <Button
-                                size="sm"
-                                onClick={() => setSelectedUserForDetails(p)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                                title="Review tests written by candidate"
-                              >
-                                <Eye size={14} /> Review ({writtenCount})
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => setSelectedUserForDetails(p)}
-                                title="View details and manage test access"
-                              >
-                                <Eye size={14} /> Details
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setSelectedUserForDetails(p)}
+                              title="View details, test history, and configure test access"
+                            >
+                              <Eye size={14} /> Details
+                            </Button>
                             {p.status === 'pending' && (
                               <Button size="sm" variant="success" onClick={() => handleApprove(p)} title="Approve candidate">
                                 <UserCheck size={14} /> Approve

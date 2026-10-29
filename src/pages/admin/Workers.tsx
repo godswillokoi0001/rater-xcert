@@ -212,25 +212,14 @@ export function AdminWorkersPage() {
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {writtenCount > 0 ? (
-                              <Button
-                                size="sm"
-                                onClick={() => setSelectedUserForDetails(p)}
-                                className="bg-purple-600 hover:bg-purple-700 text-white"
-                                title="Review tests written by worker"
-                              >
-                                <Eye size={14} /> Review ({writtenCount})
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => setSelectedUserForDetails(p)}
-                                title="View details and manage test access"
-                              >
-                                <Eye size={14} /> Details
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setSelectedUserForDetails(p)}
+                              title="View worker details, task history, and configure test access"
+                            >
+                              <Eye size={14} /> Details
+                            </Button>
                             {p.status === 'pending' && (
                               <Button
                                 size="sm"

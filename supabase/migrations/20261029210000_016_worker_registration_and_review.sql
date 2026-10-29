@@ -108,3 +108,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.update_user_role(uuid, text) TO authenticated;
+

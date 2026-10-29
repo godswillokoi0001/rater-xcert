@@ -356,13 +356,25 @@ export function AdminResultsPage() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          <Button
-                            size="sm"
-                            onClick={() => setReviewAttemptId(a.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            <Eye size={14} /> Review & Grade
-                          </Button>
+                          {a.review_status === 'pending_review' ? (
+                            <Button
+                              size="sm"
+                              onClick={() => setReviewAttemptId(a.id)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                              title="Awaiting examiner review and manual grading"
+                            >
+                              <Clock size={14} /> Review & Grade
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setReviewAttemptId(a.id)}
+                              title="View finalized assessment result and answers"
+                            >
+                              <FileText size={14} /> View Result
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="secondary"

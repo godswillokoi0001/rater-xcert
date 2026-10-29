@@ -3,7 +3,7 @@ import { ThemeProvider } from '@/lib/theme';
 import { useHashRoute, navigate } from '@/lib/router';
 import { LoadingScreen } from '@/components/layouts';
 import { LandingPage } from '@/pages/Landing';
-import { CandidateAuthPage, AdminAuthPage, BootstrapPage } from '@/pages/Auth';
+import { CandidateAuthPage, WorkerAuthPage, AdminAuthPage } from '@/pages/Auth';
 import { PendingApprovalPage } from '@/pages/PendingApproval';
 import { CandidateDashboard } from '@/pages/candidate/Dashboard';
 import { WorkerDashboard } from '@/pages/worker/Dashboard';
@@ -47,7 +47,7 @@ function Router() {
     return <PendingApprovalPage />;
   }
 
-  // Dedicated Worker Auth routes
+  // Dedicated Worker Auth routes: Strictly WorkerAuthPage
   if (route === '/worker/login' || route === '/worker/signup') {
     if (user && profile) {
       if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
@@ -56,11 +56,11 @@ function Router() {
       navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
-    return <CandidateAuthPage mode={route === '/worker/signup' ? 'signup' : 'login'} forcedRole="worker" />;
+    return <WorkerAuthPage mode={route === '/worker/signup' ? 'signup' : 'login'} />;
   }
 
-  // Dedicated Candidate Auth routes
-  if (route === '/candidate/login' || route === '/candidate/signup') {
+  // Dedicated Candidate Auth routes: Strictly CandidateAuthPage
+  if (route === '/candidate/login' || route === '/candidate/signup' || route === '/login' || route === '/signup') {
     if (user && profile) {
       if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
       if (profile.role === 'worker') { navigate('/worker'); return <LoadingScreen />; }
@@ -68,26 +68,8 @@ function Router() {
       navigate('/admin/dashboard');
       return <LoadingScreen />;
     }
-    return <CandidateAuthPage mode={route === '/candidate/signup' ? 'signup' : 'login'} forcedRole="candidate" />;
-  }
-
-  // General Candidate and Worker Auth
-  if (route === '/login' || route === '/signup') {
-    if (user && profile) {
-      if (needsApproval) { navigate('/pending-approval'); return <LoadingScreen />; }
-      if (profile.role === 'worker') {
-        navigate('/worker');
-        return <LoadingScreen />;
-      }
-      if (profile.role === 'candidate') {
-        navigate('/candidate');
-        return <LoadingScreen />;
-      }
-      navigate('/admin/dashboard');
-      return <LoadingScreen />;
-    }
-    if (route === '/login') return <CandidateAuthPage mode="login" />;
-    if (route === '/signup') return <CandidateAuthPage mode="signup" />;
+    const isSignup = route === '/candidate/signup' || route === '/signup';
+    return <CandidateAuthPage mode={isSignup ? 'signup' : 'login'} />;
   }
 
   // Admin Auth: Accessible via /admin or /admin/login (linked exclusively at footer)
