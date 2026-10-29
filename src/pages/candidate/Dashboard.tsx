@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 export function CandidateDashboard() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [tests, setTests] = useState<TestWithCounts[]>([]);
   const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
