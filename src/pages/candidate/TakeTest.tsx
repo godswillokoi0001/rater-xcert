@@ -69,12 +69,12 @@ export function TestTakingPage({ testId }: { testId: string }) {
       const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
 
       if (isWorkerUser && !isWorkerTest && test.target_role === 'candidate') {
-        setBlockedReason('This assessment is reserved for candidates. Please return to the Worker Operations Hub for assigned tasks.');
+        setBlockedReason('This assessment is reserved for candidates. Please return to the Worker Portal for worker tests.');
         setLoading(false);
         return;
       }
       if (!isWorkerUser && isWorkerTest) {
-        setBlockedReason('This operational task is reserved for verified workers. Please return to the Candidate Portal for certification tests.');
+        setBlockedReason('This test is reserved for verified workers. Please return to the Candidate Portal for candidate tests.');
         setLoading(false);
         return;
       }

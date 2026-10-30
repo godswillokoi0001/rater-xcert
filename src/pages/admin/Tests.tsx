@@ -45,25 +45,33 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
   const [deleteTarget, setDeleteTarget] = useState<Test | null>(null);
 
   const fetchTests = useCallback(async () => {
-    const { data: testsData } = await supabase.from('tests').select('*').order('created_at', { ascending: false });
-    const testIds = (testsData || []).map((t) => t.id);
-    let sectionCounts: Record<string, number> = {};
-    if (testIds.length > 0) {
-      const { data: sections } = await supabase.from('sections').select('test_id').in('test_id', testIds);
-      (sections || []).forEach((s) => {
-        sectionCounts[s.test_id] = (sectionCounts[s.test_id] || 0) + 1;
+    try {
+      const { data: testsData, error: testsErr } = await supabase.from('tests').select('*').order('created_at', { ascending: false });
+      if (testsErr) console.error('Error fetching tests:', testsErr);
+
+      const testIds = (testsData || []).map((t) => t.id);
+      let sectionCounts: Record<string, number> = {};
+      if (testIds.length > 0) {
+        const { data: sections, error: secErr } = await supabase.from('sections').select('test_id').in('test_id', testIds);
+        if (secErr) console.error('Error fetching sections:', secErr);
+        (sections || []).forEach((s) => {
+          sectionCounts[s.test_id] = (sectionCounts[s.test_id] || 0) + 1;
+        });
+      }
+
+      const all = (testsData || []).map((t) => ({ ...t, section_count: sectionCounts[t.id] || 0 })) as (Test & { section_count?: number })[];
+
+      const filtered = all.filter((t) => {
+        const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
+        return isWorkerTab ? isWorkerTest : !isWorkerTest;
       });
+
+      setTests(filtered);
+    } catch (err) {
+      console.error('Failed to load tests:', err);
+    } finally {
+      setLoading(false);
     }
-
-    const all = (testsData || []).map((t) => ({ ...t, section_count: sectionCounts[t.id] || 0 })) as (Test & { section_count?: number })[];
-
-    const filtered = all.filter((t) => {
-      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
-      return isWorkerTab ? isWorkerTest : !isWorkerTest;
-    });
-
-    setTests(filtered);
-    setLoading(false);
   }, [isWorkerTab]);
 
   useEffect(() => { fetchTests(); }, [fetchTests]);
@@ -120,23 +128,23 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">
-                {isWorkerTab ? 'Worker Tasks & Evaluations' : 'Candidate Tests & Certifications'}
+                {isWorkerTab ? 'Workers Tests' : 'Candidate Tests'}
               </h1>
               <Badge color={isWorkerTab ? 'purple' : 'blue'}>
-                {isWorkerTab ? 'Worker Portal' : 'Candidate Portal'}
+                {isWorkerTab ? 'Workers' : 'Candidates'}
               </Badge>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {isWorkerTab
-                ? 'Create, manage, and assign operational tasks, evaluations, and tests for verified workers'
-                : 'Create and manage certification exams, qualification assessments, and tests for candidates'}
+                ? 'Create, manage, and assign tests and certification exams for workers'
+                : 'Create and manage certification exams and tests for candidates'}
             </p>
           </div>
           <Button
             onClick={() => setShowCreate(true)}
             className={isWorkerTab ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/20' : ''}
           >
-            <Plus size={16} /> {isWorkerTab ? 'New Worker Task' : 'New Candidate Test'}
+            <Plus size={16} /> {isWorkerTab ? 'New Worker Test' : 'New Candidate Test'}
           </Button>
         </div>
 
@@ -144,10 +152,10 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
           <Card>
             <EmptyState
               icon={isWorkerTab ? <Briefcase size={28} className="text-purple-600" /> : <GraduationCap size={28} className="text-blue-600" />}
-              title={isWorkerTab ? 'No worker tasks yet' : 'No candidate tests yet'}
+              title={isWorkerTab ? 'No workers tests yet' : 'No candidate tests yet'}
               description={
                 isWorkerTab
-                  ? 'Create your first operational task or workforce evaluation to get started.'
+                  ? 'Create your first test for workers to get started.'
                   : 'Create your first candidate certification exam to get started.'
               }
               action={
@@ -155,7 +163,7 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
                   onClick={() => setShowCreate(true)}
                   className={isWorkerTab ? 'bg-purple-600 hover:bg-purple-700 text-white mt-2' : 'mt-2'}
                 >
-                  <Plus size={16} /> {isWorkerTab ? 'Create Worker Task' : 'Create Candidate Test'}
+                  <Plus size={16} /> {isWorkerTab ? 'Create Worker Test' : 'Create Candidate Test'}
                 </Button>
               }
             />
@@ -365,10 +373,10 @@ function TestEditorModal({
       title={
         test
           ? isWorkerTarget
-            ? 'Edit Worker Task'
+            ? 'Edit Worker Test'
             : 'Edit Candidate Test'
           : isWorkerTarget
-          ? 'Create New Worker Task'
+          ? 'Create New Worker Test'
           : 'Create New Candidate Test'
       }
     >

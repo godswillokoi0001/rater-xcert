@@ -49,7 +49,7 @@ export function WorkerDashboard() {
       const titleMap = new Map((testInfo || []).map((t) => [t.id, t.title]));
       attemptsWithTitles = (attemptsData || []).map((a) => ({
         ...a,
-        test_title: titleMap.get(a.test_id) || 'Unknown Task',
+        test_title: titleMap.get(a.test_id) || 'Unknown Test',
       })) as AttemptWithDetails[];
     }
 
@@ -286,14 +286,14 @@ export function WorkerDashboard() {
         </Card>
       </div>
 
-      {/* Available Worker Tasks */}
+      {/* Available Worker Tests */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold font-serif text-slate-900 dark:text-white tracking-tight">
-            Assigned Work Tasks & Evaluations
+            Available Worker Tests
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Work packages and verification evaluations currently active for your worker profile
+            Tests and evaluations available for your worker profile
           </p>
         </div>
       </div>
@@ -302,8 +302,8 @@ export function WorkerDashboard() {
         <Card className="mb-8">
           <EmptyState
             icon={<Briefcase size={28} className="text-purple-600" />}
-            title="No worker tasks currently queued"
-            description="New operational evaluations will appear here once allocated by your administrator."
+            title="No worker tests currently available"
+            description="Tests will appear here once published by your administrator."
           />
         </Card>
       ) : (
@@ -351,7 +351,7 @@ export function WorkerDashboard() {
                   <div>
                     {status.canTake && (
                       <Button size="sm" className="bg-purple-700 hover:bg-purple-600 text-white" onClick={() => navigate(`/worker/test/${test.id}`)}>
-                        <Play size={14} /> Begin Task
+                        <Play size={14} /> Begin Test
                       </Button>
                     )}
                     {!status.canTake && status.reason && (
@@ -365,14 +365,14 @@ export function WorkerDashboard() {
         </div>
       )}
 
-      {/* Completed Work History */}
+      {/* Completed Test History */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold font-serif text-slate-900 dark:text-white tracking-tight">
-            Completed Task Submissions & Evaluations
+            Completed Tests & Evaluations
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Audit history of your completed operational tasks and verified scores
+            History of your completed worker test attempts and verified scores
           </p>
         </div>
       </div>
@@ -381,8 +381,8 @@ export function WorkerDashboard() {
         <Card>
           <EmptyState
             icon={<Clock size={28} className="text-purple-600" />}
-            title="No task submissions yet"
-            description="Completed tasks and verification ratings will be recorded here."
+            title="No test attempts yet"
+            description="Completed test submissions will be recorded here."
           />
         </Card>
       ) : (
@@ -391,7 +391,7 @@ export function WorkerDashboard() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Task Title</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Test Title</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider hidden sm:table-cell">Submitted</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Score</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Result</th>

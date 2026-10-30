@@ -19,38 +19,50 @@ export function AdminUsersPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   const fetchProfiles = useCallback(async () => {
-    let allProfs: Profile[] = [];
     try {
-      const apiRes = await callAdminApi('list-users', 'GET');
-      if (apiRes && Array.isArray(apiRes.profiles)) {
-        allProfs = apiRes.profiles as Profile[];
-      }
-    } catch {}
+      const [{ data: profs }, { data: attemptsData }] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('attempts').select('candidate_id'),
+      ]);
 
-    if (allProfs.length === 0) {
-      const { data: profs } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      allProfs = (profs || []) as Profile[];
+      const counts: Record<string, number> = {};
+      (attemptsData || []).forEach((a: { candidate_id: string }) => {
+        counts[a.candidate_id] = (counts[a.candidate_id] || 0) + 1;
+      });
+
+      const candidates = (profs || []).filter((p: Profile) => {
+        const isWorker =
+          p.role === 'worker' ||
+          (p.permissions || []).includes('worker') ||
+          (p.permissions || []).includes('is_worker');
+        const isAdmin = p.role === 'admin' || p.role === 'super_admin';
+        return !isWorker && !isAdmin;
+      });
+
+      setProfiles(candidates as Profile[]);
+      setAttemptCounts(counts);
+    } catch (err) {
+      console.error('Failed to load candidate profiles:', err);
+    } finally {
+      setLoading(false);
     }
 
-    const { data: attemptsData } = await supabase.from('attempts').select('candidate_id');
-
-    const counts: Record<string, number> = {};
-    (attemptsData || []).forEach((a: { candidate_id: string }) => {
-      counts[a.candidate_id] = (counts[a.candidate_id] || 0) + 1;
-    });
-
-    const candidates = allProfs.filter((p: Profile) => {
-      const isWorker =
-        p.role === 'worker' ||
-        (p.permissions || []).includes('worker') ||
-        (p.permissions || []).includes('is_worker');
-      const isAdmin = p.role === 'admin' || p.role === 'super_admin';
-      return !isWorker && !isAdmin;
-    });
-
-    setProfiles(candidates as Profile[]);
-    setAttemptCounts(counts);
-    setLoading(false);
+    // Non-blocking background sync with auth user_metadata
+    callAdminApi('list-users', 'GET')
+      .then((apiRes) => {
+        if (apiRes && Array.isArray(apiRes.profiles)) {
+          const freshCandidates = (apiRes.profiles as Profile[]).filter((p: Profile) => {
+            const isWorker =
+              p.role === 'worker' ||
+              (p.permissions || []).includes('worker') ||
+              (p.permissions || []).includes('is_worker');
+            const isAdmin = p.role === 'admin' || p.role === 'super_admin';
+            return !isWorker && !isAdmin;
+          });
+          setProfiles(freshCandidates);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);

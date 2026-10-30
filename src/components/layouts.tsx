@@ -36,7 +36,7 @@ export function RouteGuard({ roles, children }: { roles: Role[]; children: React
 const adminNav = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, perm: null },
   { path: '/admin/tests', label: 'Candidate Tests', icon: GraduationCap, perm: 'can-manage-tests' },
-  { path: '/admin/worker-tests', label: 'Worker Tasks', icon: Briefcase, perm: 'can-manage-tests' },
+  { path: '/admin/worker-tests', label: 'Workers Tests', icon: Briefcase, perm: 'can-manage-tests' },
   { path: '/admin/users', label: 'Candidates', icon: Users, perm: 'can-manage-users' },
   { path: '/admin/workers', label: 'Workers', icon: Briefcase, perm: 'can-manage-users' },
   { path: '/admin/admins', label: 'Admins', icon: ShieldCheck, perm: null, superOnly: true },
