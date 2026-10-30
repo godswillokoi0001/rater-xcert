@@ -68,7 +68,7 @@ export function TestTakingPage({ testId }: { testId: string }) {
       const isWorkerUser = profile?.role === 'worker' || (profile?.permissions || []).includes('worker');
       const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
 
-      if (isWorkerUser && !isWorkerTest && test.target_role === 'candidate') {
+      if (isWorkerUser && !isWorkerTest) {
         setBlockedReason('This assessment is reserved for candidates. Please return to the Worker Portal for worker tests.');
         setLoading(false);
         return;
