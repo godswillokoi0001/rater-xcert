@@ -14,7 +14,7 @@ import { printAttemptPdf } from '@/lib/printResult';
 import type { Profile, Test, AttemptWithDetails, UserTestAccess } from '@/types';
 import {
   FileText, Award, CheckCircle2, XCircle, Clock, ShieldAlert,
-  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check, GraduationCap, Printer
+  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check, GraduationCap, Printer, Archive
 } from 'lucide-react';
 
 interface UserDetailsModalProps {
@@ -69,9 +69,10 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       }));
 
       // Merge direct access tags from all tests into accessLookup
+      const uid = (user.id || '').trim().toLowerCase();
       (testsData || []).forEach((t) => {
         const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
-        if (blockedUsers.has(user.id)) {
+        if (blockedUsers.has(uid)) {
           accessLookup[t.id] = {
             id: `tag-${t.id}`,
             user_id: user.id,
@@ -79,7 +80,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
             access_type: 'blocked',
             created_at: new Date().toISOString(),
           };
-        } else if (grantedUsers.has(user.id)) {
+        } else if (grantedUsers.has(uid)) {
           accessLookup[t.id] = {
             id: `tag-${t.id}`,
             user_id: user.id,
@@ -108,7 +109,10 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
   const handleSetAccess = async (testId: string, accessType: 'blocked' | 'granted') => {
     setUpdatingTestId(testId);
     try {
-      await setUserTestAccessOverride(user.id, testId, accessType);
+      const result = await setUserTestAccessOverride(user.id, testId, accessType);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update access');
+      }
 
       setTestAccessMap((prev) => ({
         ...prev,
@@ -148,7 +152,10 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
   const handleRemoveAccess = async (testId: string) => {
     setUpdatingTestId(testId);
     try {
-      await removeUserTestAccessOverride(user.id, testId);
+      const result = await removeUserTestAccessOverride(user.id, testId);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to reset access');
+      }
 
       setTestAccessMap((prev) => {
         const next = { ...prev };
@@ -177,6 +184,27 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
 
   // Calculate effective availability for a test
   const getTestStatus = (test: Test) => {
+    // 1. If the test is archived, it must show as archived, not available/blockable
+    if (test.status === 'archived') {
+      return {
+        status: 'archived',
+        label: 'Archived',
+        desc: 'This test is archived and not available to candidates or workers.',
+        badgeColor: 'slate' as const,
+      };
+    }
+
+    // 2. If the test is in draft mode
+    if (test.status === 'draft') {
+      return {
+        status: 'draft',
+        label: 'Draft',
+        desc: 'This test is currently unpublished.',
+        badgeColor: 'amber' as const,
+      };
+    }
+
+    // 3. Explicit individual user access overrides (block or release)
     const override = testAccessMap[test.id];
     if (override) {
       if (override.access_type === 'blocked') {
@@ -476,7 +504,15 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
 
                       {/* Action buttons */}
                       <div className="flex items-center gap-1.5 flex-wrap self-start md:self-center">
-                        {state.status === 'blocked' ? (
+                        {state.status === 'archived' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                            <Archive size={13} /> Archived
+                          </span>
+                        ) : state.status === 'draft' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                            Draft (Unpublished)
+                          </span>
+                        ) : state.status === 'blocked' ? (
                           <>
                             <Button
                               size="sm"

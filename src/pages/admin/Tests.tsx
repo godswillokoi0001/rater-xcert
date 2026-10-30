@@ -85,51 +85,51 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
   };
 
   const handleStatusChange = async (test: Test, status: TestStatus) => {
+    const safeTitle = test.title || 'Untitled Test';
+    const safeDesc = test.description || '';
+    const safePassMark = Number(test.pass_mark) || 70;
+    const safeReviewMode = test.review_mode || 'super_admin_approval';
+    const safeRetakes = test.retakes_allowed ?? 0;
+    const safeRetakeFailOnly = test.retake_on_fail_only ?? true;
+    const safeTargetRole = test.target_role || (isWorkerTab ? 'worker' : 'candidate');
+
     let res = await supabase.rpc('update_test', {
       p_test_id: test.id,
-      p_title: test.title,
-      p_description: test.description,
-      p_pass_mark: test.pass_mark,
+      p_title: safeTitle,
+      p_description: safeDesc,
+      p_pass_mark: safePassMark,
       p_status: status,
-      p_review_mode: test.review_mode || 'super_admin_approval',
-      p_retakes_allowed: test.retakes_allowed ?? 0,
-      p_retake_on_fail_only: test.retake_on_fail_only ?? true,
-      p_target_role: test.target_role || (isWorkerTab ? 'worker' : 'candidate'),
+      p_review_mode: safeReviewMode,
+      p_retakes_allowed: safeRetakes,
+      p_retake_on_fail_only: safeRetakeFailOnly,
+      p_target_role: safeTargetRole,
     });
 
     if (res.error) {
       res = await supabase.rpc('update_test', {
         p_test_id: test.id,
-        p_title: test.title,
-        p_description: test.description,
-        p_pass_mark: test.pass_mark,
+        p_title: safeTitle,
+        p_description: safeDesc,
+        p_pass_mark: safePassMark,
         p_status: status,
-        p_review_mode: test.review_mode || 'super_admin_approval',
-        p_retakes_allowed: test.retakes_allowed ?? 0,
-        p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+        p_review_mode: safeReviewMode,
+        p_retakes_allowed: safeRetakes,
+        p_retake_on_fail_only: safeRetakeFailOnly,
       });
     }
 
     if (res.error) {
       res = await supabase.rpc('update_test', {
         p_test_id: test.id,
-        p_title: test.title,
-        p_description: test.description,
-        p_pass_mark: test.pass_mark,
+        p_title: safeTitle,
+        p_description: safeDesc,
+        p_pass_mark: safePassMark,
         p_status: status,
-        p_review_mode: test.review_mode || 'super_admin_approval',
+        p_review_mode: safeReviewMode,
       });
     }
 
-    if (res.error) {
-      res = await supabase.rpc('update_test', {
-        p_test_id: test.id,
-        p_title: test.title,
-        p_description: test.description,
-        p_pass_mark: test.pass_mark,
-        p_status: status,
-      });
-    }
+    // NEVER call 5-param update_test to avoid PostgreSQL ambiguous overload errors
 
     if (res.error) {
       alert(res.error.message || 'Failed to update test status');
@@ -346,51 +346,51 @@ function TestEditorModal({
 
     try {
       if (test) {
+        const safeTitle = title.trim();
+        const safeDesc = taggedDesc || '';
+        const safePassMark = Number(passMark) || 70;
+        const safeReviewMode = reviewMode || 'super_admin_approval';
+        const safeRetakes = retakesAllowed ?? 0;
+        const safeRetakeFailOnly = retakeOnFailOnly ?? true;
+        const safeTargetRole = targetRole || (isWorkerTarget ? 'worker' : 'candidate');
+
         let res = await supabase.rpc('update_test', {
           p_test_id: test.id,
-          p_title: title.trim(),
-          p_description: taggedDesc,
-          p_pass_mark: passMark,
+          p_title: safeTitle,
+          p_description: safeDesc,
+          p_pass_mark: safePassMark,
           p_status: status,
-          p_review_mode: reviewMode,
-          p_retakes_allowed: retakesAllowed,
-          p_retake_on_fail_only: retakeOnFailOnly,
-          p_target_role: targetRole,
+          p_review_mode: safeReviewMode,
+          p_retakes_allowed: safeRetakes,
+          p_retake_on_fail_only: safeRetakeFailOnly,
+          p_target_role: safeTargetRole,
         });
 
         if (res.error) {
           res = await supabase.rpc('update_test', {
             p_test_id: test.id,
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
+            p_title: safeTitle,
+            p_description: safeDesc,
+            p_pass_mark: safePassMark,
             p_status: status,
-            p_review_mode: reviewMode,
-            p_retakes_allowed: retakesAllowed,
-            p_retake_on_fail_only: retakeOnFailOnly,
+            p_review_mode: safeReviewMode,
+            p_retakes_allowed: safeRetakes,
+            p_retake_on_fail_only: safeRetakeFailOnly,
           });
         }
 
         if (res.error) {
           res = await supabase.rpc('update_test', {
             p_test_id: test.id,
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
+            p_title: safeTitle,
+            p_description: safeDesc,
+            p_pass_mark: safePassMark,
             p_status: status,
-            p_review_mode: reviewMode,
+            p_review_mode: safeReviewMode,
           });
         }
 
-        if (res.error) {
-          res = await supabase.rpc('update_test', {
-            p_test_id: test.id,
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
-            p_status: status,
-          });
-        }
+        // NEVER call 5 params (avoid ambiguous overload)
 
         if (res.error) throw new Error(res.error.message || 'Failed to update test');
         try {

@@ -83,8 +83,9 @@ export function WorkerDashboard() {
     const eligibleTests = testsWithCounts.filter((t) => {
       // Central database tags check
       const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
-      if (blockedUsers.has(user.id)) return false;
-      if (grantedUsers.has(user.id)) return true;
+      const uid = (user.id || '').trim().toLowerCase();
+      if (blockedUsers.has(uid)) return false;
+      if (grantedUsers.has(uid)) return true;
 
       const override = accessMap[t.id];
       if (override === 'blocked') return false;

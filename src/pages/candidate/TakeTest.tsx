@@ -82,7 +82,8 @@ export function TestTakingPage({ testId }: { testId: string }) {
 
       // Check individual user test access overrides
       const { blockedUsers, grantedUsers } = parseAccessTags(test.description || '');
-      if (blockedUsers.has(user.id)) {
+      const uid = (user.id || '').trim().toLowerCase();
+      if (blockedUsers.has(uid)) {
         setBlockedReason('Access to this assessment has been blocked for your account by an administrator.');
         setLoading(false);
         return;
@@ -95,12 +96,14 @@ export function TestTakingPage({ testId }: { testId: string }) {
         return;
       }
 
-      const { data: canTake, error: canTakeErr } = await supabase.rpc('can_take_test', { p_test_id: testId });
-      if (canTakeErr || (canTake && !canTake.can_take)) {
-        setBlockedReason(canTake?.reason || 'You are not allowed to take this test at this time.');
-        setLoading(false);
-        return;
-      }
+      try {
+        const { data: canTake, error: canTakeErr } = await supabase.rpc('can_take_test', { p_test_id: testId });
+        if (!canTakeErr && canTake && !canTake.can_take) {
+          setBlockedReason(canTake.reason || 'You are not allowed to take this test at this time.');
+          setLoading(false);
+          return;
+        }
+      } catch {}
 
       const { data: sections } = await supabase
         .from('sections').select('*').eq('test_id', testId).order('order_index', { ascending: true });

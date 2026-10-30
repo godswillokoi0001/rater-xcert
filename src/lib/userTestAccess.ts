@@ -11,7 +11,7 @@ export function parseAccessTags(description: string = '') {
     blockedMatch
       ? blockedMatch[1]
           .split(',')
-          .map((s) => s.trim())
+          .map((s) => s.trim().toLowerCase())
           .filter(Boolean)
       : []
   );
@@ -19,7 +19,7 @@ export function parseAccessTags(description: string = '') {
     grantedMatch
       ? grantedMatch[1]
           .split(',')
-          .map((s) => s.trim())
+          .map((s) => s.trim().toLowerCase())
           .filter(Boolean)
       : []
   );
@@ -32,17 +32,18 @@ export function updateDescriptionAccessTags(
   userId: string,
   action: 'block' | 'grant' | 'reset'
 ): string {
+  const cleanUserId = (userId || '').trim().toLowerCase();
   const { blockedUsers, grantedUsers } = parseAccessTags(description);
 
   if (action === 'block') {
-    blockedUsers.add(userId);
-    grantedUsers.delete(userId);
+    blockedUsers.add(cleanUserId);
+    grantedUsers.delete(cleanUserId);
   } else if (action === 'grant') {
-    grantedUsers.add(userId);
-    blockedUsers.delete(userId);
+    grantedUsers.add(cleanUserId);
+    blockedUsers.delete(cleanUserId);
   } else if (action === 'reset') {
-    blockedUsers.delete(userId);
-    grantedUsers.delete(userId);
+    blockedUsers.delete(cleanUserId);
+    grantedUsers.delete(cleanUserId);
   }
 
   let clean = description
@@ -79,74 +80,75 @@ function getLocalOverrides(): Record<string, Record<string, { access_type: 'bloc
 
 function setLocalOverride(userId: string, testId: string, accessType: 'blocked' | 'granted' | null) {
   try {
+    const cleanUserId = (userId || '').trim().toLowerCase();
     const current = getLocalOverrides();
-    if (!current[userId]) current[userId] = {};
+    if (!current[cleanUserId]) current[cleanUserId] = {};
     if (accessType === null) {
-      delete current[userId][testId];
+      delete current[cleanUserId][testId];
     } else {
-      current[userId][testId] = { access_type: accessType, created_at: new Date().toISOString() };
+      current[cleanUserId][testId] = { access_type: accessType, created_at: new Date().toISOString() };
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent('raterx:access_changed', { detail: { userId, testId, accessType } }));
+    window.dispatchEvent(new CustomEvent('raterx:access_changed', { detail: { userId: cleanUserId, testId, accessType } }));
   } catch (err) {
     console.error('Failed to update local access overrides:', err);
   }
 }
 
 async function updateTestInDatabase(test: any, newDescription: string) {
-  // 1. Try 9 params
+  const safeTitle = test.title || 'Untitled Test';
+  const safeDesc = newDescription || '';
+  const safePassMark = Number(test.pass_mark) || 70;
+  const safeStatus = test.status || 'draft';
+  const safeReviewMode = test.review_mode || 'super_admin_approval';
+  const safeRetakes = test.retakes_allowed ?? 0;
+  const safeRetakeFailOnly = test.retake_on_fail_only ?? true;
+  const safeTargetRole = test.target_role || 'all';
+
+  // 1. Try 9 params (migration 014)
   let res = await supabase.rpc('update_test', {
     p_test_id: test.id,
-    p_title: test.title,
-    p_description: newDescription,
-    p_pass_mark: test.pass_mark,
-    p_status: test.status,
-    p_review_mode: test.review_mode || 'super_admin_approval',
-    p_retakes_allowed: test.retakes_allowed ?? 0,
-    p_retake_on_fail_only: test.retake_on_fail_only ?? true,
-    p_target_role: test.target_role || 'all',
+    p_title: safeTitle,
+    p_description: safeDesc,
+    p_pass_mark: safePassMark,
+    p_status: safeStatus,
+    p_review_mode: safeReviewMode,
+    p_retakes_allowed: safeRetakes,
+    p_retake_on_fail_only: safeRetakeFailOnly,
+    p_target_role: safeTargetRole,
   });
 
-  // 2. Try 8 params
+  // 2. Try 8 params (migration 013)
   if (res.error) {
     res = await supabase.rpc('update_test', {
       p_test_id: test.id,
-      p_title: test.title,
-      p_description: newDescription,
-      p_pass_mark: test.pass_mark,
-      p_status: test.status,
-      p_review_mode: test.review_mode || 'super_admin_approval',
-      p_retakes_allowed: test.retakes_allowed ?? 0,
-      p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+      p_title: safeTitle,
+      p_description: safeDesc,
+      p_pass_mark: safePassMark,
+      p_status: safeStatus,
+      p_review_mode: safeReviewMode,
+      p_retakes_allowed: safeRetakes,
+      p_retake_on_fail_only: safeRetakeFailOnly,
     });
   }
 
-  // 3. Try 6 params (exact match for remote DB)
+  // 3. Try 6 params (migration 009 - canonical remote DB signature)
   if (res.error) {
     res = await supabase.rpc('update_test', {
       p_test_id: test.id,
-      p_title: test.title,
-      p_description: newDescription,
-      p_pass_mark: test.pass_mark,
-      p_status: test.status,
-      p_review_mode: test.review_mode || 'super_admin_approval',
+      p_title: safeTitle,
+      p_description: safeDesc,
+      p_pass_mark: safePassMark,
+      p_status: safeStatus,
+      p_review_mode: safeReviewMode,
     });
   }
 
-  // 4. Try 5 params
-  if (res.error) {
-    res = await supabase.rpc('update_test', {
-      p_test_id: test.id,
-      p_title: test.title,
-      p_description: newDescription,
-      p_pass_mark: test.pass_mark,
-      p_status: test.status,
-    });
-  }
+  // NEVER call 5 params (to avoid PostgreSQL ambiguous function overload)
 
   // Also best effort direct update
   try {
-    await supabase.from('tests').update({ description: newDescription }).eq('id', test.id);
+    await supabase.from('tests').update({ description: safeDesc }).eq('id', test.id);
   } catch {}
 
   return res;
@@ -154,9 +156,10 @@ async function updateTestInDatabase(test: any, newDescription: string) {
 
 export async function fetchUserTestAccess(userId: string): Promise<Record<string, UserTestAccess>> {
   const result: Record<string, UserTestAccess> = {};
+  const cleanUserId = (userId || '').trim().toLowerCase();
 
   // 1. First check local overrides
-  const local = getLocalOverrides()[userId] || {};
+  const local = getLocalOverrides()[cleanUserId] || {};
   Object.entries(local).forEach(([testId, data]) => {
     result[testId] = {
       id: `local-${testId}`,
@@ -176,7 +179,7 @@ export async function fetchUserTestAccess(userId: string): Promise<Record<string
     if (testsData) {
       testsData.forEach((t) => {
         const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
-        if (blockedUsers.has(userId)) {
+        if (blockedUsers.has(cleanUserId)) {
           result[t.id] = {
             id: `desc-${t.id}`,
             user_id: userId,
@@ -184,7 +187,7 @@ export async function fetchUserTestAccess(userId: string): Promise<Record<string
             access_type: 'blocked',
             created_at: new Date().toISOString(),
           };
-        } else if (grantedUsers.has(userId)) {
+        } else if (grantedUsers.has(cleanUserId)) {
           result[t.id] = {
             id: `desc-${t.id}`,
             user_id: userId,
@@ -227,11 +230,15 @@ export async function setUserTestAccessOverride(
 
   // 1. Fetch test and update its description tags in Postgres centrally
   try {
-    const { data: test } = await supabase
+    const { data: test, error: fetchErr } = await supabase
       .from('tests')
       .select('*')
       .eq('id', testId)
       .maybeSingle();
+
+    if (fetchErr) {
+      console.error('Error fetching test in setUserTestAccessOverride:', fetchErr);
+    }
 
     if (test) {
       const newDesc = updateDescriptionAccessTags(
@@ -239,10 +246,15 @@ export async function setUserTestAccessOverride(
         userId,
         accessType === 'blocked' ? 'block' : 'grant'
       );
-      await updateTestInDatabase(test, newDesc);
+      const res = await updateTestInDatabase(test, newDesc);
+      if (res?.error) {
+        console.error('updateTestInDatabase error:', res.error);
+        return { success: false, error: res.error.message || 'Failed to update test in database' };
+      }
     }
   } catch (err) {
     console.error('Failed to update test description tags:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
 
   // 2. Try RPC set_user_test_access (if table/function was added via migration)
@@ -298,10 +310,14 @@ export async function removeUserTestAccessOverride(
         userId,
         'reset'
       );
-      await updateTestInDatabase(test, newDesc);
+      const res = await updateTestInDatabase(test, newDesc);
+      if (res?.error) {
+        return { success: false, error: res.error.message || 'Failed to update test in database' };
+      }
     }
   } catch (err) {
     console.error('Failed to reset test description tags:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
 
   // 2. Try RPC remove_user_test_access
