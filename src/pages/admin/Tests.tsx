@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Textarea, Label, Modal, Spinner, EmptyState, ConfirmDialog, Select } from '@/components/ui';
 import type { Test, Section, Question, Option, QuestionLink, TestStatus, ReviewMode, QuestionType, ScoringMode } from '@/types';
@@ -308,7 +309,7 @@ function TestEditorModal({
 }) {
   const isWorkerTarget = defaultTargetRole === 'worker' || test?.target_role === 'worker' || test?.description?.includes('[ROLE:worker]');
   const rawDesc = test?.description || '';
-  const initialCleanDesc = rawDesc.replace(/\[ROLE:(worker|candidate)\]/g, '').trim();
+  const initialCleanDesc = cleanTestDescription(rawDesc);
 
   const [title, setTitle] = useState(test?.title || '');
   const [description, setDescription] = useState(initialCleanDesc);
@@ -329,11 +330,18 @@ function TestEditorModal({
     }
     setSaving(true);
 
-    let taggedDesc = description.replace(/\[ROLE:(worker|candidate)\]/g, '').trim();
+    const { blockedUsers, grantedUsers } = parseAccessTags(rawDesc);
+    let taggedDesc = cleanTestDescription(description);
     if (targetRole === 'worker') {
       taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:worker]` : '[ROLE:worker]';
     } else {
       taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:candidate]` : '[ROLE:candidate]';
+    }
+    if (blockedUsers.size > 0) {
+      taggedDesc = `${taggedDesc} [BLOCKED_USERS:${Array.from(blockedUsers).join(',')}]`;
+    }
+    if (grantedUsers.size > 0) {
+      taggedDesc = `${taggedDesc} [GRANTED_USERS:${Array.from(grantedUsers).join(',')}]`;
     }
 
     try {

@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
-import { fetchUserTestAccess, setUserTestAccessOverride, removeUserTestAccessOverride } from '@/lib/userTestAccess';
+import {
+  fetchUserTestAccess,
+  setUserTestAccessOverride,
+  removeUserTestAccessOverride,
+  parseAccessTags,
+  updateDescriptionAccessTags,
+  cleanTestDescription,
+} from '@/lib/userTestAccess';
 import { Modal, Badge, Button, Spinner, EmptyState } from '@/components/ui';
 import { ReviewAttemptModal } from '@/components/ReviewAttemptModal';
 import { printAttemptPdf } from '@/lib/printResult';
@@ -49,7 +56,6 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
         supabase
           .from('tests')
           .select('*')
-          .eq('status', 'published')
           .order('title', { ascending: true }),
         fetchUserTestAccess(user.id),
       ]);
@@ -61,6 +67,28 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
         candidate_name: user.name,
         candidate_email: user.email,
       }));
+
+      // Merge direct access tags from all tests into accessLookup
+      (testsData || []).forEach((t) => {
+        const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
+        if (blockedUsers.has(user.id)) {
+          accessLookup[t.id] = {
+            id: `tag-${t.id}`,
+            user_id: user.id,
+            test_id: t.id,
+            access_type: 'blocked',
+            created_at: new Date().toISOString(),
+          };
+        } else if (grantedUsers.has(user.id)) {
+          accessLookup[t.id] = {
+            id: `tag-${t.id}`,
+            user_id: user.id,
+            test_id: t.id,
+            access_type: 'granted',
+            created_at: new Date().toISOString(),
+          };
+        }
+      });
 
       setAttempts(enrichedAttempts);
       setAllTests((testsData || []) as Test[]);
@@ -92,6 +120,21 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
           created_at: new Date().toISOString(),
         },
       }));
+
+      setAllTests((prev) =>
+        prev.map((t) => {
+          if (t.id !== testId) return t;
+          return {
+            ...t,
+            description: updateDescriptionAccessTags(
+              t.description || '',
+              user.id,
+              accessType === 'blocked' ? 'block' : 'grant'
+            ),
+          };
+        })
+      );
+
       showToast(accessType === 'blocked' ? 'Test access blocked' : 'Test released to user');
       onUserUpdated?.();
     } catch (err) {
@@ -112,6 +155,17 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
         delete next[testId];
         return next;
       });
+
+      setAllTests((prev) =>
+        prev.map((t) => {
+          if (t.id !== testId) return t;
+          return {
+            ...t,
+            description: updateDescriptionAccessTags(t.description || '', user.id, 'reset'),
+          };
+        })
+      );
+
       showToast('Reset to default role policy');
       onUserUpdated?.();
     } catch (err) {
@@ -416,7 +470,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {state.desc} • Pass Mark: {t.pass_mark}%
+                          {cleanTestDescription(t.description) ? `${cleanTestDescription(t.description)} • ` : ''}{state.desc} • Pass Mark: {t.pass_mark}%
                         </p>
                       </div>
 

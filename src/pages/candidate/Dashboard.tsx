@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { fetchUserTestAccess } from '@/lib/userTestAccess';
+import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { CandidateLayout } from '@/components/layouts';
@@ -83,6 +83,12 @@ export function CandidateDashboard() {
     const eligibleTests = testsWithCounts.filter((t) => {
       const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
       if (isWorkerTest) return false;
+
+      // Central database tags check
+      const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
+      if (blockedUsers.has(user.id)) return false;
+      if (grantedUsers.has(user.id)) return true;
+
       const override = accessMap[t.id];
       if (override === 'blocked') return false;
       if (override === 'granted') return true;
@@ -285,7 +291,7 @@ export function CandidateDashboard() {
                       </h3>
                       {test.description && (
                         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                          {test.description.replace(/\[ROLE:(worker|candidate)\]/g, '').trim()}
+                          {cleanTestDescription(test.description)}
                         </p>
                       )}
                     </div>

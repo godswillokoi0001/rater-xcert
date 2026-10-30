@@ -3,6 +3,71 @@ import type { UserTestAccess } from '../types';
 
 const STORAGE_KEY = 'raterx_user_test_access_overrides';
 
+export function parseAccessTags(description: string = '') {
+  const blockedMatch = description.match(/\[BLOCKED_USERS:([^\]]+)\]/);
+  const grantedMatch = description.match(/\[GRANTED_USERS:([^\]]+)\]/);
+
+  const blockedUsers = new Set<string>(
+    blockedMatch
+      ? blockedMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []
+  );
+  const grantedUsers = new Set<string>(
+    grantedMatch
+      ? grantedMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []
+  );
+
+  return { blockedUsers, grantedUsers };
+}
+
+export function updateDescriptionAccessTags(
+  description: string = '',
+  userId: string,
+  action: 'block' | 'grant' | 'reset'
+): string {
+  const { blockedUsers, grantedUsers } = parseAccessTags(description);
+
+  if (action === 'block') {
+    blockedUsers.add(userId);
+    grantedUsers.delete(userId);
+  } else if (action === 'grant') {
+    grantedUsers.add(userId);
+    blockedUsers.delete(userId);
+  } else if (action === 'reset') {
+    blockedUsers.delete(userId);
+    grantedUsers.delete(userId);
+  }
+
+  let clean = description
+    .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
+    .replace(/\[GRANTED_USERS:[^\]]*\]/g, '')
+    .trim();
+
+  if (blockedUsers.size > 0) {
+    clean = `${clean} [BLOCKED_USERS:${Array.from(blockedUsers).join(',')}]`.trim();
+  }
+  if (grantedUsers.size > 0) {
+    clean = `${clean} [GRANTED_USERS:${Array.from(grantedUsers).join(',')}]`.trim();
+  }
+
+  return clean;
+}
+
+export function cleanTestDescription(description: string = ''): string {
+  return description
+    .replace(/\[ROLE:(worker|candidate)\]/g, '')
+    .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
+    .replace(/\[GRANTED_USERS:[^\]]*\]/g, '')
+    .trim();
+}
+
 function getLocalOverrides(): Record<string, Record<string, { access_type: 'blocked' | 'granted'; created_at: string }>> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -28,10 +93,69 @@ function setLocalOverride(userId: string, testId: string, accessType: 'blocked' 
   }
 }
 
+async function updateTestInDatabase(test: any, newDescription: string) {
+  // 1. Try 9 params
+  let res = await supabase.rpc('update_test', {
+    p_test_id: test.id,
+    p_title: test.title,
+    p_description: newDescription,
+    p_pass_mark: test.pass_mark,
+    p_status: test.status,
+    p_review_mode: test.review_mode || 'super_admin_approval',
+    p_retakes_allowed: test.retakes_allowed ?? 0,
+    p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+    p_target_role: test.target_role || 'all',
+  });
+
+  // 2. Try 8 params
+  if (res.error) {
+    res = await supabase.rpc('update_test', {
+      p_test_id: test.id,
+      p_title: test.title,
+      p_description: newDescription,
+      p_pass_mark: test.pass_mark,
+      p_status: test.status,
+      p_review_mode: test.review_mode || 'super_admin_approval',
+      p_retakes_allowed: test.retakes_allowed ?? 0,
+      p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+    });
+  }
+
+  // 3. Try 6 params (exact match for remote DB)
+  if (res.error) {
+    res = await supabase.rpc('update_test', {
+      p_test_id: test.id,
+      p_title: test.title,
+      p_description: newDescription,
+      p_pass_mark: test.pass_mark,
+      p_status: test.status,
+      p_review_mode: test.review_mode || 'super_admin_approval',
+    });
+  }
+
+  // 4. Try 5 params
+  if (res.error) {
+    res = await supabase.rpc('update_test', {
+      p_test_id: test.id,
+      p_title: test.title,
+      p_description: newDescription,
+      p_pass_mark: test.pass_mark,
+      p_status: test.status,
+    });
+  }
+
+  // Also best effort direct update
+  try {
+    await supabase.from('tests').update({ description: newDescription }).eq('id', test.id);
+  } catch {}
+
+  return res;
+}
+
 export async function fetchUserTestAccess(userId: string): Promise<Record<string, UserTestAccess>> {
   const result: Record<string, UserTestAccess> = {};
 
-  // 1. First populate from local overrides (instant & reliable)
+  // 1. First check local overrides
   const local = getLocalOverrides()[userId] || {};
   Object.entries(local).forEach(([testId, data]) => {
     result[testId] = {
@@ -43,50 +167,52 @@ export async function fetchUserTestAccess(userId: string): Promise<Record<string
     };
   });
 
-  // 2. Query remote user_test_access table if available
+  // 2. Read from tests table directly (persisted centrally in Supabase DB for all users)
   try {
-    const { data, error } = await supabase
+    const { data: testsData } = await supabase
+      .from('tests')
+      .select('id, description');
+
+    if (testsData) {
+      testsData.forEach((t) => {
+        const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
+        if (blockedUsers.has(userId)) {
+          result[t.id] = {
+            id: `desc-${t.id}`,
+            user_id: userId,
+            test_id: t.id,
+            access_type: 'blocked',
+            created_at: new Date().toISOString(),
+          };
+        } else if (grantedUsers.has(userId)) {
+          result[t.id] = {
+            id: `desc-${t.id}`,
+            user_id: userId,
+            test_id: t.id,
+            access_type: 'granted',
+            created_at: new Date().toISOString(),
+          };
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching test tags in fetchUserTestAccess:', err);
+  }
+
+  // 3. If user_test_access table exists, layer it on top
+  try {
+    const { data: dbData } = await supabase
       .from('user_test_access')
       .select('*')
       .eq('user_id', userId);
 
-    if (!error && data && data.length > 0) {
-      data.forEach((item: UserTestAccess) => {
+    if (dbData && dbData.length > 0) {
+      dbData.forEach((item: UserTestAccess) => {
         result[item.test_id] = item;
       });
-      return result;
     }
   } catch {
-    // Table not created yet on database
-  }
-
-  // 3. Fallback: check audit_logs for access overrides
-  try {
-    const { data: auditData } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .eq('entity_type', 'user_test_access')
-      .order('created_at', { ascending: true });
-
-    if (auditData && auditData.length > 0) {
-      auditData.forEach((row: { details?: { user_id?: string; test_id?: string; access_type?: string } }) => {
-        if (row.details?.user_id === userId && row.details?.test_id) {
-          if (row.details.access_type === 'blocked' || row.details.access_type === 'granted') {
-            result[row.details.test_id] = {
-              id: `audit-${row.details.test_id}`,
-              user_id: userId,
-              test_id: row.details.test_id,
-              access_type: row.details.access_type,
-              created_at: new Date().toISOString(),
-            };
-          } else if (row.details.access_type === 'reset') {
-            delete result[row.details.test_id];
-          }
-        }
-      });
-    }
-  } catch {
-    // Non-admin or audit_logs read not permitted
+    // Table not created yet
   }
 
   return result;
@@ -97,38 +223,49 @@ export async function setUserTestAccessOverride(
   testId: string,
   accessType: 'blocked' | 'granted'
 ): Promise<{ success: boolean; error?: string }> {
-  // Always update local cache so frontend reflects it immediately
   setLocalOverride(userId, testId, accessType);
 
-  // 1. Try RPC set_user_test_access
-  let rpcRes = await supabase.rpc('set_user_test_access', {
-    p_user_id: userId,
-    p_test_id: testId,
-    p_access_type: accessType,
-    p_notes: `Admin set to ${accessType}`,
-  });
+  // 1. Fetch test and update its description tags in Postgres centrally
+  try {
+    const { data: test } = await supabase
+      .from('tests')
+      .select('*')
+      .eq('id', testId)
+      .maybeSingle();
 
-  if (!rpcRes.error) {
-    return { success: true };
+    if (test) {
+      const newDesc = updateDescriptionAccessTags(
+        test.description || '',
+        userId,
+        accessType === 'blocked' ? 'block' : 'grant'
+      );
+      await updateTestInDatabase(test, newDesc);
+    }
+  } catch (err) {
+    console.error('Failed to update test description tags:', err);
   }
 
-  // 2. Try direct upsert into user_test_access table
+  // 2. Try RPC set_user_test_access (if table/function was added via migration)
   try {
-    const { error: tblErr } = await supabase.from('user_test_access').upsert({
+    await supabase.rpc('set_user_test_access', {
+      p_user_id: userId,
+      p_test_id: testId,
+      p_access_type: accessType,
+      p_notes: `Admin set to ${accessType}`,
+    });
+  } catch {}
+
+  // 3. Try direct upsert into user_test_access table
+  try {
+    await supabase.from('user_test_access').upsert({
       user_id: userId,
       test_id: testId,
       access_type: accessType,
       notes: `Admin set to ${accessType}`,
     }, { onConflict: 'user_id,test_id' });
+  } catch {}
 
-    if (!tblErr) {
-      return { success: true };
-    }
-  } catch {
-    // Table not created yet
-  }
-
-  // 3. Log audit so the change is persisted in the database
+  // 4. Log audit so the change is persisted in the database
   try {
     await supabase.rpc('log_audit', {
       p_action: accessType === 'blocked' ? 'block_user_test' : 'grant_user_test',
@@ -136,9 +273,7 @@ export async function setUserTestAccessOverride(
       p_entity_id: testId,
       p_details: { user_id: userId, test_id: testId, access_type: accessType },
     });
-  } catch {
-    // Best effort
-  }
+  } catch {}
 
   return { success: true };
 }
@@ -149,30 +284,44 @@ export async function removeUserTestAccessOverride(
 ): Promise<{ success: boolean; error?: string }> {
   setLocalOverride(userId, testId, null);
 
-  // 1. Try RPC remove_user_test_access
-  let rpcRes = await supabase.rpc('remove_user_test_access', {
-    p_user_id: userId,
-    p_test_id: testId,
-  });
+  // 1. Fetch test and update its description tags in Postgres
+  try {
+    const { data: test } = await supabase
+      .from('tests')
+      .select('*')
+      .eq('id', testId)
+      .maybeSingle();
 
-  if (!rpcRes.error) {
-    return { success: true };
+    if (test) {
+      const newDesc = updateDescriptionAccessTags(
+        test.description || '',
+        userId,
+        'reset'
+      );
+      await updateTestInDatabase(test, newDesc);
+    }
+  } catch (err) {
+    console.error('Failed to reset test description tags:', err);
   }
 
-  // 2. Try direct delete
+  // 2. Try RPC remove_user_test_access
   try {
-    const { error: tblErr } = await supabase
+    await supabase.rpc('remove_user_test_access', {
+      p_user_id: userId,
+      p_test_id: testId,
+    });
+  } catch {}
+
+  // 3. Try direct delete
+  try {
+    await supabase
       .from('user_test_access')
       .delete()
       .eq('user_id', userId)
       .eq('test_id', testId);
+  } catch {}
 
-    if (!tblErr) return { success: true };
-  } catch {
-    // Table not created yet
-  }
-
-  // 3. Log audit
+  // 4. Log audit
   try {
     await supabase.rpc('log_audit', {
       p_action: 'remove_user_test_access',
@@ -180,9 +329,7 @@ export async function removeUserTestAccessOverride(
       p_entity_id: testId,
       p_details: { user_id: userId, test_id: testId, access_type: 'reset' },
     });
-  } catch {
-    // Best effort
-  }
+  } catch {}
 
   return { success: true };
 }

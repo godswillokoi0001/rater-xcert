@@ -187,3 +187,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.can_take_test(uuid) TO authenticated;
+
