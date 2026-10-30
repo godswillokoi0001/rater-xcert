@@ -5,7 +5,7 @@ import { printAttemptPdf } from '@/lib/printResult';
 import type { ReviewData, QuestionType, Answer } from '@/types';
 import {
   X, CheckCircle2, XCircle, Award, Printer, Save, Send, Clock,
-  FileText, ExternalLink, RotateCcw, AlertCircle, Check, Eye, ZoomIn, Briefcase, GraduationCap
+  FileText, ExternalLink, RotateCcw, AlertCircle, Check, Eye, ZoomIn, Briefcase, GraduationCap, Edit3
 } from 'lucide-react';
 
 interface ReviewAttemptModalProps {
@@ -31,6 +31,7 @@ export function ReviewAttemptModal({
   const [savingGrades, setSavingGrades] = useState(false);
   const [gradeSavedToast, setGradeSavedToast] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [showEditControls, setShowEditControls] = useState(false);
 
   // question_id -> { grade, score, feedback }
   const [manualGrades, setManualGrades] = useState<
@@ -45,6 +46,7 @@ export function ReviewAttemptModal({
     setRetakeCount(1);
     setReleaseMsg(null);
     setGradeSavedToast(false);
+    setShowEditControls(false);
 
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -80,7 +82,7 @@ export function ReviewAttemptModal({
 
         const [{ data: test }, { data: candidateProfile }, { data: sections }] = await Promise.all([
           supabase.from('tests').select('title, pass_mark').eq('id', attempt.test_id).single(),
-          supabase.from('profiles').select('name, email, role').eq('id', attempt.candidate_id).single(),
+          supabase.from('profiles').select('name, email, role, permissions').eq('id', attempt.candidate_id).single(),
           supabase.from('sections').select('*').eq('test_id', attempt.test_id).order('order_index', { ascending: true }),
         ]);
 
@@ -103,6 +105,7 @@ export function ReviewAttemptModal({
           pass_mark: test?.pass_mark ?? 70,
           candidate_name: candidateProfile?.name || 'User',
           candidate_email: candidateProfile?.email || '',
+          candidate_role: candidateProfile?.role || 'candidate',
           sections: sections || [],
           questions: questions || [],
           options: options || [],
@@ -252,6 +255,10 @@ export function ReviewAttemptModal({
     setReleasing(true);
     setReleaseMsg(null);
 
+    const isWorker = reviewData.candidate_role === 'worker' ||
+      (reviewData.attempt as any)?.target_role === 'worker' ||
+      reviewData.test_title?.toLowerCase().includes('worker');
+
     const { finalScore, passOrFail, totalCorrectDisplay, totalQuestions } = getCalculatedScore(reviewData, manualGrades);
     const updatedAnswers: Answer[] = reviewData.questions.map((q) => {
       const existing = reviewData.attempt.answers?.find((a: Answer) => a.question_id === q.id) || { question_id: q.id, selected_option_id: null };
@@ -268,7 +275,10 @@ export function ReviewAttemptModal({
     });
 
     try {
-      await supabase
+      const { data: authData } = await supabase.auth.getUser();
+      const currentAdminId = authData?.user?.id || null;
+
+      const { error: updateErr } = await supabase
         .from('attempts')
         .update({
           answers: updatedAnswers,
@@ -278,8 +288,14 @@ export function ReviewAttemptModal({
           total_questions: totalQuestions,
           review_status: 'released',
           admin_notes: adminNotes,
+          released_at: new Date().toISOString(),
+          released_by: currentAdminId,
         })
         .eq('id', reviewData.attempt.id);
+
+      if (updateErr) {
+        throw updateErr;
+      }
 
       try {
         await callAdminApi('release-attempt', 'POST', {
@@ -291,16 +307,40 @@ export function ReviewAttemptModal({
       } catch {
         if (grantRetake) {
           try {
-            await callAdminApi('grant-retake', 'POST', {
-              candidateId: reviewData.attempt.candidate_id,
-              testId: reviewData.attempt.test_id,
-              retakeCount,
-            });
-          } catch {}
+            await supabase.from('test_unlocks').upsert(
+              {
+                candidate_id: reviewData.attempt.candidate_id,
+                test_id: reviewData.attempt.test_id,
+                retakes_allowed: retakeCount,
+                retakes_used: 0,
+                unlocked_at: new Date().toISOString(),
+                unlocked_by: currentAdminId,
+              },
+              { onConflict: 'candidate_id,test_id' }
+            );
+          } catch (e) {
+            console.error('Failed to grant retake directly:', e);
+          }
         }
       }
 
-      setReleaseMsg(`Score released successfully! Candidate has been credited. ${grantRetake ? 'Retake granted.' : ''}`);
+      try {
+        await supabase.from('notifications').insert({
+          user_id: reviewData.attempt.candidate_id,
+          title: 'Assessment Score Released',
+          message: `Your score for "${reviewData.test_title}" has been reviewed and released: ${finalScore}% (${passOrFail.toUpperCase()}).`,
+          type: 'result_released',
+          link: isWorker ? '/worker' : '/candidate',
+          created_at: new Date().toISOString(),
+        });
+      } catch {}
+
+      const roleLabel = isWorker ? 'Worker' : 'Candidate';
+      const successMessage = `Score released successfully! ${roleLabel} has been credited with a score of ${finalScore}% (${passOrFail.toUpperCase()}).${grantRetake ? ` ${retakeCount} retake${retakeCount > 1 ? 's' : ''} granted.` : ''}`;
+
+      setReleaseMsg(successMessage);
+      setShowEditControls(false);
+
       setReviewData({
         ...reviewData,
         attempt: {
@@ -312,17 +352,23 @@ export function ReviewAttemptModal({
           total_questions: totalQuestions,
           review_status: 'released',
           admin_notes: adminNotes,
+          released_at: new Date().toISOString(),
+          released_by: currentAdminId,
         },
       });
+
       if (onUpdated) onUpdated();
     } catch (err) {
-      alert((err as Error).message);
+      alert(err instanceof Error ? err.message : 'Failed to release score');
     } finally {
       setReleasing(false);
     }
   };
 
   const activeCalc = reviewData ? getCalculatedScore(reviewData, manualGrades) : null;
+  const isWorker = reviewData?.candidate_role === 'worker' ||
+    (reviewData?.attempt as any)?.target_role === 'worker' ||
+    reviewData?.test_title?.toLowerCase().includes('worker');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
@@ -711,72 +757,178 @@ export function ReviewAttemptModal({
               })}
 
               {/* Retake & Release Section */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm font-serif">
-                  Official Decision & Release Controls
-                </h4>
+              {reviewData.attempt.review_status === 'released' && !showEditControls ? (
+                <div className="p-6 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 space-y-4 animate-fade-in shadow-sm">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                      <CheckCircle2 size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-emerald-950 dark:text-emerald-100 text-base font-serif">
+                          Score Released & Finalized
+                        </h4>
+                        <Badge color="green">Released</Badge>
+                      </div>
+                      <p className="text-xs sm:text-sm text-emerald-800 dark:text-emerald-200 mt-1">
+                        This assessment has been reviewed and officially released to the {isWorker ? 'worker' : 'candidate'}.
+                      </p>
+                      {reviewData.attempt.admin_notes && (
+                        <div className="mt-2.5 p-3 rounded-xl bg-white/90 dark:bg-emerald-900/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-200">
+                          <strong>Examiner Notes:</strong> {reviewData.attempt.admin_notes}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Examiner Assessment Notes (visible on official report):
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    placeholder="Provide official feedback on candidate performance, recommendations, or grading comments..."
-                    className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex-wrap">
-                  <label className="flex items-center gap-2 text-xs sm:text-sm text-slate-800 dark:text-slate-200 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={grantRetake}
-                      onChange={(e) => setGrantRetake(e.target.checked)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>Grant retake privilege upon release</span>
-                  </label>
-
-                  {grantRetake && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500">Retakes to grant:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={retakeCount}
-                        onChange={(e) => setRetakeCount(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-16 px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center"
-                      />
+                  {releaseMsg && (
+                    <div className="p-3.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 text-xs sm:text-sm text-emerald-950 dark:text-emerald-100 font-semibold flex items-center gap-2.5 shadow-sm animate-fade-in">
+                      <Check size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{releaseMsg}</span>
                     </div>
                   )}
-                </div>
 
-                <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSaveManualGrades}
-                    disabled={savingGrades}
-                  >
-                    {savingGrades ? <Spinner size={14} /> : <Save size={14} />} Save Grades & Notes
-                  </Button>
+                  <div className="flex items-center justify-between pt-3 border-t border-emerald-200 dark:border-emerald-800/60 flex-wrap gap-3">
+                    <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                      Final Score: <strong className="text-emerald-950 dark:text-white font-bold">{reviewData.attempt.score}%</strong> • Decision:{' '}
+                      <strong className={reviewData.attempt.pass_or_fail === 'pass' ? 'text-green-700 dark:text-green-300 font-bold uppercase' : 'text-red-700 dark:text-red-300 font-bold uppercase'}>
+                        {reviewData.attempt.pass_or_fail}
+                      </strong>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleRelease}
-                      disabled={releasing}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      {releasing ? <Spinner size={14} /> : <Send size={14} />} Release Score & Finalize
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => printAttemptPdf(reviewData.attempt.id, reviewData)}
+                        title="Print official accredited certificate and result PDF"
+                      >
+                        <Printer size={14} /> Print PDF
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowEditControls(true)}
+                        title="Modify notes or grant additional retakes"
+                      >
+                        <Edit3 size={14} /> Edit Notes / Retakes
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled
+                        className="bg-emerald-700 text-white cursor-default opacity-95"
+                      >
+                        <Check size={14} /> Score Released
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={onClose}
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm font-serif">
+                      {reviewData.attempt.review_status === 'released' ? 'Update Release Decision & Notes' : 'Official Decision & Release Controls'}
+                    </h4>
+                    {reviewData.attempt.review_status === 'released' && (
+                      <Badge color="green">Currently Released</Badge>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      Examiner Assessment Notes (visible on official report):
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={adminNotes}
+                      onChange={(e) => setAdminNotes(e.target.value)}
+                      placeholder="Provide official feedback on candidate performance, recommendations, or grading comments..."
+                      className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex-wrap">
+                    <label className="flex items-center gap-2 text-xs sm:text-sm text-slate-800 dark:text-slate-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={grantRetake}
+                        onChange={(e) => setGrantRetake(e.target.checked)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Grant retake privilege upon release</span>
+                    </label>
+
+                    {grantRetake && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Retakes to grant:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={retakeCount}
+                          onChange={(e) => setRetakeCount(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-16 px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {releaseMsg && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm text-emerald-800 dark:text-emerald-200 font-medium flex items-center gap-2 animate-fade-in">
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{releaseMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleSaveManualGrades}
+                        disabled={savingGrades}
+                      >
+                        {savingGrades ? <Spinner size={14} /> : <Save size={14} />} Save Grades & Notes
+                      </Button>
+                      {reviewData.attempt.review_status === 'released' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowEditControls(false)}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleRelease}
+                        disabled={releasing}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
+                      >
+                        {releasing ? (
+                          <>
+                            <Spinner size={14} /> Releasing...
+                          </>
+                        ) : (
+                          <>
+                            <Send size={14} /> {reviewData.attempt.review_status === 'released' ? 'Update & Re-release' : 'Release Score & Finalize'}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -801,6 +953,21 @@ export function ReviewAttemptModal({
               <X size={20} />
             </button>
           </div>
+        </div>
+      )}
+      {/* Floating Toast Notification on Release */}
+      {releaseMsg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-60 max-w-lg w-[92%] sm:w-auto p-4 rounded-2xl bg-emerald-600 text-white shadow-2xl flex items-center gap-3 animate-fade-in border border-emerald-500">
+          <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center shrink-0">
+            <CheckCircle2 size={20} className="text-white" />
+          </div>
+          <span className="text-xs sm:text-sm font-semibold pr-2">{releaseMsg}</span>
+          <button
+            onClick={() => setReleaseMsg(null)}
+            className="ml-auto p-1.5 text-emerald-200 hover:text-white hover:bg-emerald-700/60 rounded-lg transition-colors"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
     </div>

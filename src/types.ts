@@ -162,6 +162,7 @@ export interface ReviewData {
   pass_mark: number;
   candidate_name: string;
   candidate_email: string;
+  candidate_role?: string;
   sections: any[];
   questions: any[];
   options: any[];
