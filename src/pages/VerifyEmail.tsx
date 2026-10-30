@@ -5,7 +5,7 @@ import { Button, Input, Label, Spinner } from '@/components/ui';
 import { ShieldCheck, Mail, ArrowLeft, AlertCircle, RefreshCw } from 'lucide-react';
 
 export function VerifyEmailPage() {
-  const { user, profile, sendVerificationCode, verifyCode, signOut } = useAuth();
+  const { user, profile, sendVerificationCode, verifyCode, signOut } = useAuth() as any;
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,5 @@
 export type Role = 'candidate' | 'worker' | 'admin' | 'super_admin';
-export type UserStatus = 'active' | 'disabled';
+export type UserStatus = 'active' | 'disabled' | 'pending';
 export type TestStatus = 'draft' | 'published' | 'archived';
 export type PassFail = 'pass' | 'fail';
 export type ReviewMode = 'immediate' | 'super_admin_approval';
@@ -154,4 +154,16 @@ export interface AuditLog {
 export interface TestWithCounts extends Test {
   section_count?: number;
   question_count?: number;
+}
+
+export interface ReviewData {
+  attempt: Attempt;
+  test_title: string;
+  pass_mark: number;
+  candidate_name: string;
+  candidate_email: string;
+  sections: any[];
+  questions: any[];
+  options: any[];
+  links: any[];
 }

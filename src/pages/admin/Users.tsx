@@ -46,23 +46,6 @@ export function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-
-    // Non-blocking background sync with auth user_metadata
-    callAdminApi('list-users', 'GET')
-      .then((apiRes) => {
-        if (apiRes && Array.isArray(apiRes.profiles)) {
-          const freshCandidates = (apiRes.profiles as Profile[]).filter((p: Profile) => {
-            const isWorker =
-              p.role === 'worker' ||
-              (p.permissions || []).includes('worker') ||
-              (p.permissions || []).includes('is_worker');
-            const isAdmin = p.role === 'admin' || p.role === 'super_admin';
-            return !isWorker && !isAdmin;
-          });
-          setProfiles(freshCandidates);
-        }
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);

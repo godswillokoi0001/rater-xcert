@@ -28,8 +28,6 @@ function Router() {
 
   if (route === '/' || route === '') return <LandingPage />;
 
-  if (route === '/bootstrap') return <BootstrapPage />;
-
   // Gate: if candidate or worker is pending approval, force to pending-approval
   if (needsApproval && route !== '/pending-approval') {
     navigate('/pending-approval');

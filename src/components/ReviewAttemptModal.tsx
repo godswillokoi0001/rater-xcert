@@ -171,7 +171,7 @@ export function ReviewAttemptModal({
     const totalQuestions = data.questions.length || 1;
     const totalPointsEarned = autoCorrect + manualScoreSum;
     const finalScore = Math.min(100, Math.max(0, Math.round((totalPointsEarned / totalQuestions) * 100)));
-    const passOrFail = finalScore >= data.pass_mark ? 'pass' : 'fail';
+    const passOrFail: 'pass' | 'fail' = finalScore >= data.pass_mark ? 'pass' : 'fail';
     const totalCorrectDisplay = Math.round(totalPointsEarned * 10) / 10;
 
     return { autoCorrect, manualScoreSum, totalPointsEarned, finalScore, passOrFail, totalCorrectDisplay, totalQuestions };
@@ -354,7 +354,7 @@ export function ReviewAttemptModal({
                   <span>•</span>
                   <span>{reviewData.test_title}</span>
                   <span>•</span>
-                  <span>{new Date(reviewData.attempt.submitted_at).toLocaleString()}</span>
+                  <span>{reviewData.attempt.submitted_at ? new Date(reviewData.attempt.submitted_at).toLocaleString() : '—'}</span>
                 </p>
               </div>
 

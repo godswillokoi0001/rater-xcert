@@ -410,11 +410,13 @@ export function WorkerDashboard() {
                         {attempt.test_title}
                       </td>
                       <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400 hidden sm:table-cell">
-                        {new Date(attempt.submitted_at).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        {attempt.submitted_at
+                          ? new Date(attempt.submitted_at).toLocaleDateString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-sm font-bold text-slate-900 dark:text-white">
                         {isReleased ? `${attempt.score}%` : '—'}
