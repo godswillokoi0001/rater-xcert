@@ -160,12 +160,18 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       }
     }
 
-    const testTarget = test.target_role || 'all';
-    if (testTarget === 'all' || testTarget === user.role) {
+    const isWorkerUser = currentRole === 'worker' || (user.permissions || []).includes('worker');
+    const effectiveUserRole = isWorkerUser ? 'worker' : 'candidate';
+
+    const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
+    const isCandidateTest = test.target_role === 'candidate' || test.description?.includes('[ROLE:candidate]');
+    const testTarget = isWorkerTest ? 'worker' : isCandidateTest ? 'candidate' : (test.target_role || 'all');
+
+    if (testTarget === 'all' || testTarget === effectiveUserRole) {
       return {
         status: 'default_available',
         label: 'Available (Default)',
-        desc: `Available to all ${testTarget === 'all' ? 'users' : user.role + 's'}.`,
+        desc: `Available to all ${testTarget === 'all' ? 'users' : effectiveUserRole + 's'}.`,
         badgeColor: 'green' as const,
       };
     }
@@ -178,7 +184,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
     };
   };
 
-  const isWorker = currentRole === 'worker';
+  const isWorker = currentRole === 'worker' || (user.permissions || []).includes('worker');
 
   const handleSwitchRole = async () => {
     const nextRole = isWorker ? 'candidate' : 'worker';
@@ -189,7 +195,15 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       } catch {
         await supabase.rpc('update_user_role', { p_user_id: user.id, p_role: nextRole });
       }
+      const newPerms = nextRole === 'worker'
+        ? Array.from(new Set([...(user.permissions || []), 'worker']))
+        : (user.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker');
       user.role = nextRole;
+      user.permissions = newPerms;
+      const { error: err } = await supabase.from('profiles').update({ role: nextRole, permissions: newPerms }).eq('id', user.id);
+      if (err) {
+        await supabase.from('profiles').update({ permissions: newPerms }).eq('id', user.id);
+      }
       setCurrentRole(nextRole);
       showToast(`User successfully changed to ${nextRole === 'worker' ? 'Worker' : 'Candidate'}.`);
       onUserUpdated?.();

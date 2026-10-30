@@ -34,10 +34,13 @@ export function WorkerAuthPage({ mode = 'login' }: { mode?: 'login' | 'signup' }
         if (signInErr) throw signInErr;
         if (!authData.user) throw new Error('Sign in failed');
 
-        // Check profile
+        // Check user metadata and profile
+        const userMeta = authData.user.user_metadata || {};
+        const isMetadataWorker = userMeta.role === 'worker' || userMeta.is_worker === true;
+
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select('id, name, role, status')
+          .select('id, name, role, status, permissions')
           .eq('id', authData.user.id)
           .maybeSingle();
 
@@ -50,12 +53,39 @@ export function WorkerAuthPage({ mode = 'login' }: { mode?: 'login' | 'signup' }
               'Administrative accounts must use the Admin Portal link in the footer.'
             );
           }
-          if (prof.role === 'candidate') {
+
+          const hasWorkerPerm = (prof.permissions || []).includes('worker');
+          const isRealWorker = isMetadataWorker || prof.role === 'worker' || hasWorkerPerm;
+
+          if (!isRealWorker) {
             await supabase.auth.signOut();
             throw new Error(
               'This account is registered as a Candidate. Please sign in via the Candidate Portal.'
             );
           }
+
+          // If user is a verified worker, ensure profile reflects worker role and permissions
+          if (prof.role !== 'worker' || !hasWorkerPerm) {
+            const workerPerms = Array.from(new Set([...(prof.permissions || []), 'worker']));
+            try {
+              const { error: updErr } = await supabase
+                .from('profiles')
+                .update({ role: 'worker', permissions: workerPerms })
+                .eq('id', prof.id);
+              if (updErr) {
+                await supabase
+                  .from('profiles')
+                  .update({ permissions: workerPerms })
+                  .eq('id', prof.id);
+              }
+            } catch {
+              await supabase
+                .from('profiles')
+                .update({ permissions: workerPerms })
+                .eq('id', prof.id);
+            }
+          }
+
           if (prof.status === 'disabled') {
             await supabase.auth.signOut();
             throw new Error('Your worker account has been disabled. Please contact operations support.');

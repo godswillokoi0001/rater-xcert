@@ -41,9 +41,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let finalProf = data as Profile;
       try {
         const { data: uData } = await supabase.auth.getUser();
-        if (uData?.user?.user_metadata?.role === 'worker' && finalProf.role === 'candidate') {
-          await supabase.from('profiles').update({ role: 'worker' }).eq('id', uid);
-          finalProf = { ...finalProf, role: 'worker' };
+        const userMeta = uData?.user?.user_metadata;
+        const isWorker =
+          finalProf.role === 'worker' ||
+          (finalProf.permissions || []).includes('worker') ||
+          userMeta?.role === 'worker' ||
+          userMeta?.is_worker === true;
+
+        if (isWorker && finalProf.role !== 'worker') {
+          const workerPerms = Array.from(new Set([...(finalProf.permissions || []), 'worker']));
+          finalProf = { ...finalProf, role: 'worker', permissions: workerPerms };
+          try {
+            const { error: updErr } = await supabase.from('profiles').update({ role: 'worker', permissions: workerPerms }).eq('id', uid);
+            if (updErr) {
+              await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
+            }
+          } catch {
+            await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
+          }
         }
       } catch {}
       setProfile(finalProf);
@@ -59,9 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           let finalRetry = retry as Profile;
           try {
             const { data: uData } = await supabase.auth.getUser();
-            if (uData?.user?.user_metadata?.role === 'worker' && finalRetry.role === 'candidate') {
-              await supabase.from('profiles').update({ role: 'worker' }).eq('id', uid);
-              finalRetry = { ...finalRetry, role: 'worker' };
+            const userMeta = uData?.user?.user_metadata;
+            const isWorker =
+              finalRetry.role === 'worker' ||
+              (finalRetry.permissions || []).includes('worker') ||
+              userMeta?.role === 'worker' ||
+              userMeta?.is_worker === true;
+
+            if (isWorker && finalRetry.role !== 'worker') {
+              const workerPerms = Array.from(new Set([...(finalRetry.permissions || []), 'worker']));
+              finalRetry = { ...finalRetry, role: 'worker', permissions: workerPerms };
+              try {
+                const { error: updErr } = await supabase.from('profiles').update({ role: 'worker', permissions: workerPerms }).eq('id', uid);
+                if (updErr) {
+                  await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
+                }
+              } catch {
+                await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
+              }
             }
           } catch {}
           setProfile(finalRetry);
@@ -146,20 +176,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: authData, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name, role } },
+        options: {
+          data: {
+            name,
+            role,
+            is_worker: role === 'worker',
+          },
+        },
       });
       if (error) throw error;
 
-      if (authData?.user) {
-        try {
-          await supabase
-            .from('profiles')
-            .update({ role, name })
-            .eq('id', authData.user.id);
-        } catch {}
-        try {
-          await supabase.rpc('claim_my_role', { p_role: role });
-        } catch {}
+      // Immediately sign in to establish an active authenticated session
+      try {
+        const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+        const targetId = signInData?.user?.id || authData?.user?.id;
+        if (targetId) {
+          const perms = role === 'worker' ? ['worker'] : [];
+          try {
+            const { error: err1 } = await supabase
+              .from('profiles')
+              .update({ role, name, permissions: perms })
+              .eq('id', targetId);
+            if (err1) {
+              await supabase
+                .from('profiles')
+                .update({ name, permissions: perms })
+                .eq('id', targetId);
+            }
+          } catch {
+            await supabase
+              .from('profiles')
+              .update({ name, permissions: perms })
+              .eq('id', targetId);
+          }
+        }
+      } catch {
+        // Fallback if sign in fails (e.g. requires email confirmation)
+        if (authData?.user) {
+          const perms = role === 'worker' ? ['worker'] : [];
+          try {
+            const { error: err2 } = await supabase
+              .from('profiles')
+              .update({ role, name, permissions: perms })
+              .eq('id', authData.user.id);
+            if (err2) {
+              await supabase
+                .from('profiles')
+                .update({ name, permissions: perms })
+                .eq('id', authData.user.id);
+            }
+          } catch {}
+        }
       }
     }
   };

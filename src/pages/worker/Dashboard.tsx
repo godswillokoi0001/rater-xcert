@@ -78,13 +78,13 @@ export function WorkerDashboard() {
       accessMap[acc.test_id] = acc.access_type;
     });
 
-    // Workers see tests targeted to 'worker' or 'all', or granted individually
+    // Workers see tests strictly targeted to workers, or granted individually
     const eligibleTests = testsWithCounts.filter((t) => {
       const override = accessMap[t.id];
       if (override === 'blocked') return false;
       if (override === 'granted') return true;
-      const target = t.target_role || 'all';
-      return target === 'all' || target === 'worker';
+      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
+      return isWorkerTest;
     });
 
     setTests(eligibleTests);
@@ -320,7 +320,7 @@ export function WorkerDashboard() {
                       </h3>
                       {test.description && (
                         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                          {test.description}
+                          {test.description.replace(/\[ROLE:(worker|candidate)\]/g, '').trim()}
                         </p>
                       )}
                     </div>

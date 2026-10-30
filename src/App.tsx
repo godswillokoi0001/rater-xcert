@@ -114,7 +114,8 @@ function Router() {
     if (!user || !profile) { navigate('/admin/login'); return <LoadingScreen />; }
     if (profile.role !== 'admin' && profile.role !== 'super_admin') { navigate('/candidate'); return <LoadingScreen />; }
     if (parts[1] === 'dashboard') return <AdminDashboard />;
-    if (parts[1] === 'tests') return <AdminTestsPage />;
+    if (parts[1] === 'tests') return <AdminTestsPage roleFilter="candidate" />;
+    if (parts[1] === 'worker-tests') return <AdminTestsPage roleFilter="worker" />;
     if (parts[1] === 'users') return <AdminUsersPage />;
     if (parts[1] === 'workers') return <AdminWorkersPage />;
     if (parts[1] === 'admins') return <AdminAdminsPage />;

@@ -80,6 +80,8 @@ export function CandidateDashboard() {
 
     // Candidates see tests targeted to 'candidate' or 'all', or granted individually
     const eligibleTests = testsWithCounts.filter((t) => {
+      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
+      if (isWorkerTest) return false;
       const override = accessMap[t.id];
       if (override === 'blocked') return false;
       if (override === 'granted') return true;
@@ -282,7 +284,7 @@ export function CandidateDashboard() {
                       </h3>
                       {test.description && (
                         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                          {test.description}
+                          {test.description.replace(/\[ROLE:(worker|candidate)\]/g, '').trim()}
                         </p>
                       )}
                     </div>

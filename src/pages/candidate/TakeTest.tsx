@@ -65,6 +65,20 @@ export function TestTakingPage({ testId }: { testId: string }) {
       if (!test) { navigate(homePath); return; }
       if (test.status !== 'published') { navigate(homePath); return; }
 
+      const isWorkerUser = profile?.role === 'worker' || (profile?.permissions || []).includes('worker');
+      const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
+
+      if (isWorkerUser && !isWorkerTest && test.target_role === 'candidate') {
+        setBlockedReason('This assessment is reserved for candidates. Please return to the Worker Operations Hub for assigned tasks.');
+        setLoading(false);
+        return;
+      }
+      if (!isWorkerUser && isWorkerTest) {
+        setBlockedReason('This operational task is reserved for verified workers. Please return to the Candidate Portal for certification tests.');
+        setLoading(false);
+        return;
+      }
+
       const { data: canTake, error: canTakeErr } = await supabase.rpc('can_take_test', { p_test_id: testId });
       if (canTakeErr || (canTake && !canTake.can_take)) {
         setBlockedReason(canTake?.reason || 'You are not allowed to take this test at this time.');

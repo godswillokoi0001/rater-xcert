@@ -34,10 +34,13 @@ export function CandidateAuthPage({ mode = 'login' }: { mode?: 'login' | 'signup
         if (signInErr) throw signInErr;
         if (!authData.user) throw new Error('Sign in failed');
 
-        // Check profile
+        // Check user metadata and profile
+        const userMeta = authData.user.user_metadata || {};
+        const isMetadataWorker = userMeta.role === 'worker' || userMeta.is_worker === true;
+
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select('id, name, role, status')
+          .select('id, name, role, status, permissions')
           .eq('id', authData.user.id)
           .maybeSingle();
 
@@ -50,7 +53,11 @@ export function CandidateAuthPage({ mode = 'login' }: { mode?: 'login' | 'signup
               'Administrative accounts must use the Admin Portal link in the footer.'
             );
           }
-          if (prof.role === 'worker') {
+
+          const hasWorkerPerm = (prof.permissions || []).includes('worker');
+          const isWorker = isMetadataWorker || prof.role === 'worker' || hasWorkerPerm;
+
+          if (isWorker) {
             await supabase.auth.signOut();
             throw new Error(
               'This account is registered as a Worker. Please sign in via the Worker Operations Portal.'

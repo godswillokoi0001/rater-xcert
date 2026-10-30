@@ -19,17 +19,36 @@ export function AdminWorkersPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   const fetchProfiles = useCallback(async () => {
-    const [{ data: profs }, { data: attemptsData }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('role', 'worker').order('created_at', { ascending: false }),
-      supabase.from('attempts').select('candidate_id'),
-    ]);
+    let allProfs: Profile[] = [];
+    try {
+      const apiRes = await callAdminApi('list-users', 'GET');
+      if (apiRes && Array.isArray(apiRes.profiles)) {
+        allProfs = apiRes.profiles as Profile[];
+      }
+    } catch {}
+
+    if (allProfs.length === 0) {
+      const { data: profs } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      allProfs = (profs || []) as Profile[];
+    }
+
+    const { data: attemptsData } = await supabase.from('attempts').select('candidate_id');
 
     const counts: Record<string, number> = {};
     (attemptsData || []).forEach((a: { candidate_id: string }) => {
       counts[a.candidate_id] = (counts[a.candidate_id] || 0) + 1;
     });
 
-    setProfiles((profs || []) as Profile[]);
+    const workers = allProfs.filter((p: Profile) => {
+      const isWorker =
+        p.role === 'worker' ||
+        (p.permissions || []).includes('worker') ||
+        (p.permissions || []).includes('is_worker');
+      const isAdmin = p.role === 'admin' || p.role === 'super_admin';
+      return isWorker && !isAdmin;
+    });
+
+    setProfiles(workers as Profile[]);
     setAttemptCounts(counts);
     setLoading(false);
   }, []);
@@ -55,6 +74,11 @@ export function AdminWorkersPage() {
         await callAdminApi('update-user-role', 'POST', { userId: profile.id, role: 'candidate' });
       } catch {
         await supabase.rpc('update_user_role', { p_user_id: profile.id, p_role: 'candidate' });
+      }
+      const newPerms = (profile.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker');
+      const { error: err } = await supabase.from('profiles').update({ role: 'candidate', permissions: newPerms }).eq('id', profile.id);
+      if (err) {
+        await supabase.from('profiles').update({ permissions: newPerms }).eq('id', profile.id);
       }
       fetchProfiles();
     } catch (err) {

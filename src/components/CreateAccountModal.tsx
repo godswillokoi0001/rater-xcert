@@ -97,12 +97,24 @@ export function CreateAccountModal({
         if (signUpErr) throw signUpErr;
 
         if (signUpData.user) {
+          const perms = role === 'admin' ? permissions : role === 'worker' ? ['worker'] : [];
           try {
+            const { error: updErr } = await supabase
+              .from('profiles')
+              .update({ role, name: name.trim(), status, permissions: perms })
+              .eq('id', signUpData.user.id);
+            if (updErr) {
+              await supabase
+                .from('profiles')
+                .update({ name: name.trim(), status, permissions: perms })
+                .eq('id', signUpData.user.id);
+            }
+          } catch {
             await supabase
               .from('profiles')
-              .update({ role, name: name.trim(), status })
+              .update({ name: name.trim(), status, permissions: perms })
               .eq('id', signUpData.user.id);
-          } catch {}
+          }
 
           if (role === 'worker') {
             try {

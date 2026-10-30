@@ -14,7 +14,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
-    const path = url.pathname.replace(/^\/admin-api\/?/, "");
+    const path = url.pathname.replace(/^\/?admin-api\/?/, "").replace(/^\/+/, "").replace(/\/+$/, "");
     const method = req.method;
 
     // Route: POST /bootstrap — one-time super-admin setup (no auth required)
@@ -104,16 +104,30 @@ Deno.serve(async (req: Request) => {
       }
 
       // Upsert profile directly using service_role key to ensure targetRole ('worker' or 'candidate') is stored!
-      await adminClient
+      const userPerms = targetRole === "worker" ? ["worker"] : [];
+      const { error: upsertErr } = await adminClient
         .from("profiles")
         .upsert({
           id: newUser.user.id,
           name: name?.trim() || email.split("@")[0],
           role: targetRole,
           status: "pending",
-          permissions: [],
+          permissions: userPerms,
           email_verified: true,
         });
+
+      if (upsertErr) {
+        // Fallback if check constraint doesn't allow 'worker' role directly
+        await adminClient
+          .from("profiles")
+          .upsert({
+            id: newUser.user.id,
+            name: name?.trim() || email.split("@")[0],
+            status: "pending",
+            permissions: userPerms,
+            email_verified: true,
+          });
+      }
 
       return new Response(JSON.stringify({ success: true, id: newUser.user.id, role: targetRole }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -180,6 +194,65 @@ Deno.serve(async (req: Request) => {
       });
     };
 
+    // Route: GET /list-users — fetch all profiles synchronized with auth user_metadata
+    if (path === "list-users" && method === "GET") {
+      if (!hasPerm("can-manage-users")) {
+        return new Response(JSON.stringify({ error: "Permission 'can-manage-users' required" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      const [{ data: profs }, { data: authUsersRes }] = await Promise.all([
+        adminClient.from("profiles").select("*").order("created_at", { ascending: false }),
+        adminClient.auth.admin.listUsers({ perPage: 1000 }),
+      ]);
+
+      const authMap = new Map();
+      (authUsersRes?.users || []).forEach((u: any) => {
+        authMap.set(u.id, u);
+      });
+
+      const updatedProfiles = (profs || []).map((p: any) => {
+        const u = authMap.get(p.id);
+        const userMeta = u?.user_metadata || {};
+        const isWorker =
+          p.role === "worker" ||
+          (p.permissions || []).includes("worker") ||
+          userMeta.role === "worker" ||
+          userMeta.is_worker === true;
+
+        if (isWorker && p.role !== "worker") {
+          const newPerms = Array.from(new Set([...(p.permissions || []), "worker"]));
+          p.role = "worker";
+          p.permissions = newPerms;
+          // Synchronize in background
+          adminClient
+            .from("profiles")
+            .update({ role: "worker", permissions: newPerms })
+            .eq("id", p.id)
+            .then(({ error }: { error: any }) => {
+              if (error) {
+                adminClient.from("profiles").update({ permissions: newPerms }).eq("id", p.id);
+              }
+            });
+        }
+        return {
+          ...p,
+          email: u?.email || p.email,
+        };
+      });
+
+      return new Response(JSON.stringify({ success: true, profiles: updatedProfiles }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Route: POST /create-user or /create-account — super_admin (or authorized admin) creates any user account
     if ((path === "create-user" || path === "create-account") && method === "POST") {
       const { email, password, name, role, permissions, status } = await req.json();
@@ -242,9 +315,13 @@ Deno.serve(async (req: Request) => {
       }
 
       const userStatus = status || "active";
-      const userPerms = (targetRole === "admin" || targetRole === "super_admin") ? (permissions || []) : [];
+      const userPerms = (targetRole === "admin" || targetRole === "super_admin")
+        ? (permissions || [])
+        : targetRole === "worker"
+        ? ["worker"]
+        : [];
 
-      await adminClient
+      const { error: updErr } = await adminClient
         .from("profiles")
         .update({
           role: targetRole,
@@ -253,6 +330,17 @@ Deno.serve(async (req: Request) => {
           permissions: userPerms,
         })
         .eq("id", newUser.user.id);
+
+      if (updErr) {
+        await adminClient
+          .from("profiles")
+          .update({
+            name: name || email.split("@")[0],
+            status: userStatus,
+            permissions: userPerms,
+          })
+          .eq("id", newUser.user.id);
+      }
 
       await logAudit("create_account", "user", newUser.user.id, {
         email,

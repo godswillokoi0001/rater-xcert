@@ -35,7 +35,8 @@ const QUESTION_TYPE_META: Record<QuestionType, { label: string; icon: React.Reac
   true_false: { label: 'True / False', icon: <ToggleLeft size={14} />, color: 'text-emerald-600 bg-emerald-50' },
 };
 
-export function AdminTestsPage() {
+export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'candidate' | 'worker' }) {
+  const isWorkerTab = roleFilter === 'worker';
   const [tests, setTests] = useState<(Test & { section_count?: number })[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
@@ -53,9 +54,17 @@ export function AdminTestsPage() {
         sectionCounts[s.test_id] = (sectionCounts[s.test_id] || 0) + 1;
       });
     }
-    setTests((testsData || []).map((t) => ({ ...t, section_count: sectionCounts[t.id] || 0 })) as (Test & { section_count?: number })[]);
+
+    const all = (testsData || []).map((t) => ({ ...t, section_count: sectionCounts[t.id] || 0 })) as (Test & { section_count?: number })[];
+
+    const filtered = all.filter((t) => {
+      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
+      return isWorkerTab ? isWorkerTest : !isWorkerTest;
+    });
+
+    setTests(filtered);
     setLoading(false);
-  }, []);
+  }, [isWorkerTab]);
 
   useEffect(() => { fetchTests(); }, [fetchTests]);
 
@@ -67,38 +76,89 @@ export function AdminTestsPage() {
   };
 
   const handleStatusChange = async (test: Test, status: TestStatus) => {
-    await supabase.rpc('update_test', {
-      p_test_id: test.id,
-      p_title: test.title,
-      p_description: test.description,
-      p_pass_mark: test.pass_mark,
-      p_status: status,
-      p_review_mode: test.review_mode || 'super_admin_approval',
-      p_retakes_allowed: test.retakes_allowed ?? 0,
-      p_retake_on_fail_only: test.retake_on_fail_only ?? true,
-      p_target_role: test.target_role || 'all',
-    });
+    try {
+      await supabase.rpc('update_test', {
+        p_test_id: test.id,
+        p_title: test.title,
+        p_description: test.description,
+        p_pass_mark: test.pass_mark,
+        p_status: status,
+        p_review_mode: test.review_mode || 'super_admin_approval',
+        p_retakes_allowed: test.retakes_allowed ?? 0,
+        p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+        p_target_role: test.target_role || (isWorkerTab ? 'worker' : 'candidate'),
+      });
+    } catch {
+      await supabase.rpc('update_test', {
+        p_test_id: test.id,
+        p_title: test.title,
+        p_description: test.description,
+        p_pass_mark: test.pass_mark,
+        p_status: status,
+        p_review_mode: test.review_mode || 'super_admin_approval',
+        p_retakes_allowed: test.retakes_allowed ?? 0,
+        p_retake_on_fail_only: test.retake_on_fail_only ?? true,
+      });
+    }
     fetchTests();
   };
 
-  if (loading) return <RouteGuard roles={['admin', 'super_admin']}><AdminLayout current="/admin/tests"><div className="flex justify-center py-20"><Spinner size={32} /></div></AdminLayout></RouteGuard>;
+  if (loading) {
+    return (
+      <RouteGuard roles={['admin', 'super_admin']}>
+        <AdminLayout current={isWorkerTab ? '/admin/worker-tests' : '/admin/tests'}>
+          <div className="flex justify-center py-20"><Spinner size={32} /></div>
+        </AdminLayout>
+      </RouteGuard>
+    );
+  }
 
   return (
     <RouteGuard roles={['admin', 'super_admin']}>
-      <AdminLayout current="/admin/tests">
-        <div className="flex items-center justify-between mb-6">
+      <AdminLayout current={isWorkerTab ? '/admin/worker-tests' : '/admin/tests'}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif mb-1">Tests & Certifications</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Create and manage certification exams</p>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white font-serif">
+                {isWorkerTab ? 'Worker Tasks & Evaluations' : 'Candidate Tests & Certifications'}
+              </h1>
+              <Badge color={isWorkerTab ? 'purple' : 'blue'}>
+                {isWorkerTab ? 'Worker Portal' : 'Candidate Portal'}
+              </Badge>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {isWorkerTab
+                ? 'Create, manage, and assign operational tasks, evaluations, and tests for verified workers'
+                : 'Create and manage certification exams, qualification assessments, and tests for candidates'}
+            </p>
           </div>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus size={16} /> New Test
+          <Button
+            onClick={() => setShowCreate(true)}
+            className={isWorkerTab ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/20' : ''}
+          >
+            <Plus size={16} /> {isWorkerTab ? 'New Worker Task' : 'New Candidate Test'}
           </Button>
         </div>
 
         {tests.length === 0 ? (
           <Card>
-            <EmptyState icon={<FileText size={28} />} title="No tests yet" description="Create your first certification exam to get started." />
+            <EmptyState
+              icon={isWorkerTab ? <Briefcase size={28} className="text-purple-600" /> : <GraduationCap size={28} className="text-blue-600" />}
+              title={isWorkerTab ? 'No worker tasks yet' : 'No candidate tests yet'}
+              description={
+                isWorkerTab
+                  ? 'Create your first operational task or workforce evaluation to get started.'
+                  : 'Create your first candidate certification exam to get started.'
+              }
+              action={
+                <Button
+                  onClick={() => setShowCreate(true)}
+                  className={isWorkerTab ? 'bg-purple-600 hover:bg-purple-700 text-white mt-2' : 'mt-2'}
+                >
+                  <Plus size={16} /> {isWorkerTab ? 'Create Worker Task' : 'Create Candidate Test'}
+                </Button>
+              }
+            />
           </Card>
         ) : (
           <div className="space-y-3">
@@ -135,14 +195,14 @@ export function AdminTestsPage() {
                               : 'No Retakes'}
                           </span>
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
-                            test.target_role === 'worker'
+                            test.target_role === 'worker' || test.description?.includes('[ROLE:worker]')
                               ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                               : test.target_role === 'candidate'
                               ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                               : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                           }`}>
-                            <Users size={10} />
-                            {test.target_role === 'worker' ? 'Workers Only' : test.target_role === 'candidate' ? 'Candidates Only' : 'All Users'}
+                            {test.target_role === 'worker' || test.description?.includes('[ROLE:worker]') ? <Briefcase size={10} /> : <GraduationCap size={10} />}
+                            {test.target_role === 'worker' || test.description?.includes('[ROLE:worker]') ? 'Workers Only' : test.target_role === 'candidate' ? 'Candidates Only' : 'All Users'}
                           </span>
                         </div>
                       </div>
@@ -183,6 +243,7 @@ export function AdminTestsPage() {
         {(showCreate || editingTest) && (
           <TestEditorModal
             test={editingTest}
+            defaultTargetRole={isWorkerTab ? 'worker' : 'candidate'}
             onClose={() => { setShowCreate(false); setEditingTest(null); }}
             onSaved={() => { setShowCreate(false); setEditingTest(null); fetchTests(); }}
           />
@@ -202,42 +263,92 @@ export function AdminTestsPage() {
   );
 }
 
-function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClose: () => void; onSaved: () => void }) {
+function TestEditorModal({
+  test,
+  onClose,
+  onSaved,
+  defaultTargetRole = 'candidate',
+}: {
+  test: Test | null;
+  onClose: () => void;
+  onSaved: () => void;
+  defaultTargetRole?: 'candidate' | 'worker';
+}) {
+  const isWorkerTarget = defaultTargetRole === 'worker' || test?.target_role === 'worker' || test?.description?.includes('[ROLE:worker]');
+  const rawDesc = test?.description || '';
+  const initialCleanDesc = rawDesc.replace(/\[ROLE:(worker|candidate)\]/g, '').trim();
+
   const [title, setTitle] = useState(test?.title || '');
-  const [description, setDescription] = useState(test?.description || '');
+  const [description, setDescription] = useState(initialCleanDesc);
   const [passMark, setPassMark] = useState(test?.pass_mark ?? 70);
   const [status, setStatus] = useState<TestStatus>(test?.status || 'draft');
   const [reviewMode, setReviewMode] = useState<ReviewMode>(test?.review_mode || 'super_admin_approval');
   const [retakesAllowed, setRetakesAllowed] = useState<number>(test?.retakes_allowed ?? 0);
   const [retakeOnFailOnly, setRetakeOnFailOnly] = useState<boolean>(test?.retake_on_fail_only ?? true);
-  const [targetRole, setTargetRole] = useState<'all' | 'candidate' | 'worker'>(test?.target_role || 'all');
+  const [targetRole, setTargetRole] = useState<'all' | 'candidate' | 'worker'>(
+    test?.target_role || (isWorkerTarget ? 'worker' : 'candidate')
+  );
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
+    if (!title.trim()) {
+      alert('Please enter a test title');
+      return;
+    }
     setSaving(true);
+
+    let taggedDesc = description.replace(/\[ROLE:(worker|candidate)\]/g, '').trim();
+    if (targetRole === 'worker') {
+      taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:worker]` : '[ROLE:worker]';
+    }
+
     try {
       if (test) {
-        await supabase.rpc('update_test', {
-          p_test_id: test.id,
-          p_title: title,
-          p_description: description,
-          p_pass_mark: passMark,
-          p_status: status,
-          p_review_mode: reviewMode,
-          p_retakes_allowed: retakesAllowed,
-          p_retake_on_fail_only: retakeOnFailOnly,
-          p_target_role: targetRole,
-        });
+        try {
+          await supabase.rpc('update_test', {
+            p_test_id: test.id,
+            p_title: title.trim(),
+            p_description: taggedDesc,
+            p_pass_mark: passMark,
+            p_status: status,
+            p_review_mode: reviewMode,
+            p_retakes_allowed: retakesAllowed,
+            p_retake_on_fail_only: retakeOnFailOnly,
+            p_target_role: targetRole,
+          });
+        } catch {
+          await supabase.rpc('update_test', {
+            p_test_id: test.id,
+            p_title: title.trim(),
+            p_description: taggedDesc,
+            p_pass_mark: passMark,
+            p_status: status,
+            p_review_mode: reviewMode,
+            p_retakes_allowed: retakesAllowed,
+            p_retake_on_fail_only: retakeOnFailOnly,
+          });
+        }
       } else {
-        await supabase.rpc('create_test', {
-          p_title: title,
-          p_description: description,
-          p_pass_mark: passMark,
-          p_review_mode: reviewMode,
-          p_retakes_allowed: retakesAllowed,
-          p_retake_on_fail_only: retakeOnFailOnly,
-          p_target_role: targetRole,
-        });
+        try {
+          await supabase.rpc('create_test', {
+            p_title: title.trim(),
+            p_description: taggedDesc,
+            p_pass_mark: passMark,
+            p_review_mode: reviewMode,
+            p_retakes_allowed: retakesAllowed,
+            p_retake_on_fail_only: retakeOnFailOnly,
+            p_target_role: targetRole,
+          });
+        } catch {
+          await supabase.rpc('create_test', {
+            p_title: title.trim(),
+            p_description: taggedDesc,
+            p_pass_mark: passMark,
+            p_review_mode: reviewMode,
+            p_retakes_allowed: retakesAllowed,
+            p_retake_on_fail_only: retakeOnFailOnly,
+          });
+        }
       }
       onSaved();
     } catch (err) {
@@ -248,7 +359,19 @@ function TestEditorModal({ test, onClose, onSaved }: { test: Test | null; onClos
   };
 
   return (
-    <Modal open={true} onClose={onClose} title={test ? 'Edit Test' : 'Create New Test'}>
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={
+        test
+          ? isWorkerTarget
+            ? 'Edit Worker Task'
+            : 'Edit Candidate Test'
+          : isWorkerTarget
+          ? 'Create New Worker Task'
+          : 'Create New Candidate Test'
+      }
+    >
       <div className="space-y-4">
         <div>
           <Label>Test Title</Label>
