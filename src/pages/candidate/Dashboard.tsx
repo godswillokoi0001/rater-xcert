@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchUserTestAccess } from '@/lib/userTestAccess';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { CandidateLayout } from '@/components/layouts';
@@ -33,13 +34,13 @@ export function CandidateDashboard() {
       { data: attemptsData },
       { data: notifData },
       { data: unlocksData },
-      { data: accessData },
+      accessLookup,
     ] = await Promise.all([
       supabase.from('tests').select('*').eq('status', 'published').order('created_at', { ascending: false }),
       supabase.from('attempts').select('*').eq('candidate_id', user.id).order('submitted_at', { ascending: false }),
       supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
       supabase.from('test_unlocks').select('*').eq('candidate_id', user.id),
-      supabase.from('user_test_access').select('*').eq('user_id', user.id),
+      fetchUserTestAccess(user.id),
     ]);
 
     let attemptsWithTitles: AttemptWithDetails[] = [];
@@ -74,7 +75,7 @@ export function CandidateDashboard() {
     });
 
     const accessMap: Record<string, string> = {};
-    (accessData || []).forEach((acc: { test_id: string; access_type: string }) => {
+    Object.values(accessLookup || {}).forEach((acc) => {
       accessMap[acc.test_id] = acc.access_type;
     });
 

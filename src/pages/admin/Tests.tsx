@@ -116,6 +116,17 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
         p_description: test.description,
         p_pass_mark: test.pass_mark,
         p_status: status,
+        p_review_mode: test.review_mode || 'super_admin_approval',
+      });
+    }
+
+    if (res.error) {
+      res = await supabase.rpc('update_test', {
+        p_test_id: test.id,
+        p_title: test.title,
+        p_description: test.description,
+        p_pass_mark: test.pass_mark,
+        p_status: status,
       });
     }
 
@@ -349,6 +360,17 @@ function TestEditorModal({
             p_review_mode: reviewMode,
             p_retakes_allowed: retakesAllowed,
             p_retake_on_fail_only: retakeOnFailOnly,
+          });
+        }
+
+        if (res.error) {
+          res = await supabase.rpc('update_test', {
+            p_test_id: test.id,
+            p_title: title.trim(),
+            p_description: taggedDesc,
+            p_pass_mark: passMark,
+            p_status: status,
+            p_review_mode: reviewMode,
           });
         }
 

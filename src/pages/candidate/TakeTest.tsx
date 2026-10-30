@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchUserTestAccess } from '@/lib/userTestAccess';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { Button, Card, Badge, Spinner } from '@/components/ui';
@@ -75,6 +76,14 @@ export function TestTakingPage({ testId }: { testId: string }) {
       }
       if (!isWorkerUser && isWorkerTest) {
         setBlockedReason('This test is reserved for verified workers. Please return to the Candidate Portal for candidate tests.');
+        setLoading(false);
+        return;
+      }
+
+      // Check individual user test access overrides
+      const accessLookup = await fetchUserTestAccess(user.id);
+      if (accessLookup[testId]?.access_type === 'blocked') {
+        setBlockedReason('Access to this assessment has been blocked for your account by an administrator.');
         setLoading(false);
         return;
       }

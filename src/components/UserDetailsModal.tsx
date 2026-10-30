@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { fetchUserTestAccess, setUserTestAccessOverride, removeUserTestAccessOverride } from '@/lib/userTestAccess';
 import { Modal, Badge, Button, Spinner, EmptyState } from '@/components/ui';
 import { ReviewAttemptModal } from '@/components/ReviewAttemptModal';
 import { printAttemptPdf } from '@/lib/printResult';
@@ -38,7 +39,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       const [
         { data: attemptsData },
         { data: testsData },
-        { data: accessData },
+        accessLookup,
       ] = await Promise.all([
         supabase
           .from('attempts')
@@ -50,10 +51,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
           .select('*')
           .eq('status', 'published')
           .order('title', { ascending: true }),
-        supabase
-          .from('user_test_access')
-          .select('*')
-          .eq('user_id', user.id),
+        fetchUserTestAccess(user.id),
       ]);
 
       const testTitleMap = new Map((testsData || []).map((t) => [t.id, t.title]));
@@ -63,11 +61,6 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
         candidate_name: user.name,
         candidate_email: user.email,
       }));
-
-      const accessLookup: Record<string, UserTestAccess> = {};
-      (accessData || []).forEach((item: UserTestAccess) => {
-        accessLookup[item.test_id] = item;
-      });
 
       setAttempts(enrichedAttempts);
       setAllTests((testsData || []) as Test[]);
@@ -87,13 +80,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
   const handleSetAccess = async (testId: string, accessType: 'blocked' | 'granted') => {
     setUpdatingTestId(testId);
     try {
-      const { error } = await supabase.rpc('set_user_test_access', {
-        p_user_id: user.id,
-        p_test_id: testId,
-        p_access_type: accessType,
-        p_notes: `Admin set to ${accessType}`,
-      });
-      if (error) throw error;
+      await setUserTestAccessOverride(user.id, testId, accessType);
 
       setTestAccessMap((prev) => ({
         ...prev,
@@ -118,11 +105,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
   const handleRemoveAccess = async (testId: string) => {
     setUpdatingTestId(testId);
     try {
-      const { error } = await supabase.rpc('remove_user_test_access', {
-        p_user_id: user.id,
-        p_test_id: testId,
-      });
-      if (error) throw error;
+      await removeUserTestAccessOverride(user.id, testId);
 
       setTestAccessMap((prev) => {
         const next = { ...prev };
