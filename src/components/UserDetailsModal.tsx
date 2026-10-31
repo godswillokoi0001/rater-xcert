@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { cleanUserName, formatRoleName, isWorkerProfile, setUserRole } from '@/lib/userRoles';
 import {
   fetchUserTestAccess,
   setUserTestAccessOverride,
@@ -26,7 +27,7 @@ interface UserDetailsModalProps {
 export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'tests' | 'access'>('tests');
   const [loading, setLoading] = useState(true);
-  const [currentRole, setCurrentRole] = useState(user.role);
+  const [currentRole, setCurrentRole] = useState(isWorkerProfile(user) ? 'worker' : 'candidate');
   const [switchingRole, setSwitchingRole] = useState(false);
   const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
   const [allTests, setAllTests] = useState<Test[]>([]);
@@ -64,7 +65,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       const enrichedAttempts: AttemptWithDetails[] = (attemptsData || []).map((a) => ({
         ...a,
         test_title: testTitleMap.get(a.test_id) || 'Unknown Test',
-        candidate_name: user.name,
+        candidate_name: cleanUserName(user.name) || 'User',
         candidate_email: user.email,
       }));
 
@@ -225,7 +226,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       }
     }
 
-    const isWorkerUser = currentRole === 'worker' || (user.permissions || []).includes('worker');
+    const isWorkerUser = currentRole === 'worker';
     const effectiveUserRole = isWorkerUser ? 'worker' : 'candidate';
 
     const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
@@ -249,26 +250,24 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
     };
   };
 
-  const isWorker = currentRole === 'worker' || (user.permissions || []).includes('worker');
+  const isWorker = currentRole === 'worker';
 
   const handleSwitchRole = async () => {
     const nextRole = isWorker ? 'candidate' : 'worker';
     setSwitchingRole(true);
     try {
-      try {
-        await callAdminApi('update-user-role', 'POST', { userId: user.id, role: nextRole });
-      } catch {
-        await supabase.rpc('update_user_role', { p_user_id: user.id, p_role: nextRole });
+      const res = await setUserRole(user.id, user.name, nextRole);
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to update user role');
       }
+
+      user.role = nextRole;
+      user.name = formatRoleName(user.name, nextRole);
       const newPerms = nextRole === 'worker'
         ? Array.from(new Set([...(user.permissions || []), 'worker']))
         : (user.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker');
-      user.role = nextRole;
       user.permissions = newPerms;
-      const { error: err } = await supabase.from('profiles').update({ role: nextRole, permissions: newPerms }).eq('id', user.id);
-      if (err) {
-        await supabase.from('profiles').update({ permissions: newPerms }).eq('id', user.id);
-      }
+
       setCurrentRole(nextRole);
       showToast(`User successfully changed to ${nextRole === 'worker' ? 'Worker' : 'Candidate'}.`);
       onUserUpdated?.();
@@ -297,7 +296,7 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{user.name || 'Unnamed User'}</h3>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{cleanUserName(user.name) || 'Unnamed User'}</h3>
                   <Badge color={isWorker ? 'purple' : 'blue'}>
                     {isWorker ? 'Worker' : 'Candidate'}
                   </Badge>

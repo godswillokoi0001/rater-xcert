@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { isWorkerProfile, cleanUserName, setUserRole, formatRoleName } from '@/lib/userRoles';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Modal, Spinner, EmptyState, ConfirmDialog } from '@/components/ui';
 import { UserDetailsModal } from '@/components/UserDetailsModal';
@@ -17,6 +18,7 @@ export function AdminWorkersPage() {
   const [selectedUserForDetails, setSelectedUserForDetails] = useState<Profile | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const fetchProfiles = useCallback(async () => {
     try {
@@ -31,12 +33,8 @@ export function AdminWorkersPage() {
       });
 
       const workers = (profs || []).filter((p: Profile) => {
-        const isWorker =
-          p.role === 'worker' ||
-          (p.permissions || []).includes('worker') ||
-          (p.permissions || []).includes('is_worker');
         const isAdmin = p.role === 'admin' || p.role === 'super_admin';
-        return isWorker && !isAdmin;
+        return isWorkerProfile(p) && !isAdmin;
       });
 
       setProfiles(workers as Profile[]);
@@ -64,20 +62,18 @@ export function AdminWorkersPage() {
   };
 
   const handleSwitchToCandidate = async (profile: Profile) => {
+    setSwitchingId(profile.id);
     try {
-      try {
-        await callAdminApi('update-user-role', 'POST', { userId: profile.id, role: 'candidate' });
-      } catch {
-        await supabase.rpc('update_user_role', { p_user_id: profile.id, p_role: 'candidate' });
+      const res = await setUserRole(profile.id, profile.name, 'candidate');
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to switch to candidate role');
       }
-      const newPerms = (profile.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker');
-      const { error: err } = await supabase.from('profiles').update({ role: 'candidate', permissions: newPerms }).eq('id', profile.id);
-      if (err) {
-        await supabase.from('profiles').update({ permissions: newPerms }).eq('id', profile.id);
-      }
-      fetchProfiles();
+      setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
+      await fetchProfiles();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to switch role');
+    } finally {
+      setSwitchingId(null);
     }
   };
 
@@ -93,9 +89,10 @@ export function AdminWorkersPage() {
   };
 
   const filtered = profiles.filter((p) => {
+    const clean = cleanUserName(p.name).toLowerCase();
     const matchesSearch =
       !search ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      clean.includes(search.toLowerCase()) ||
       (p.email && p.email.toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -197,11 +194,11 @@ export function AdminWorkersPage() {
                             className="flex items-center gap-3 text-left group"
                           >
                             <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-950/60 flex items-center justify-center text-purple-700 dark:text-purple-300 text-sm font-medium shrink-0">
-                              {p.name?.charAt(0).toUpperCase() || '?'}
+                              {cleanUserName(p.name)?.charAt(0).toUpperCase() || '?'}
                             </div>
                             <div>
                               <p className="text-sm font-medium text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                                {p.name || 'Unnamed'}
+                                {cleanUserName(p.name) || 'Unnamed'}
                               </p>
                               <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                 <Mail size={10} /> {p.email || '—'}
@@ -253,10 +250,11 @@ export function AdminWorkersPage() {
                               size="sm"
                               variant="ghost"
                               onClick={() => handleSwitchToCandidate(p)}
+                              disabled={switchingId === p.id}
                               title="Switch to Candidate role"
-                              className="text-blue-600 dark:text-blue-400"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                             >
-                              <GraduationCap size={14} />
+                              {switchingId === p.id ? <Spinner size={14} /> : <GraduationCap size={14} />}
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditTarget(p)} title="Edit Name">
                               <Edit3 size={14} />
@@ -336,12 +334,13 @@ function EditNameModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState(profile.name);
+  const [name, setName] = useState(cleanUserName(profile.name));
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
-    await supabase.rpc('update_user_name', { p_user_id: profile.id, p_name: name });
+    const updated = formatRoleName(name.trim(), 'worker');
+    await supabase.rpc('update_user_name', { p_user_id: profile.id, p_name: updated });
     setSaving(false);
     onSaved();
   };

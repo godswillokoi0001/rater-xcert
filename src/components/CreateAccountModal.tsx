@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { formatRoleName, cleanUserName, setUserRole } from '@/lib/userRoles';
 import { createClient } from '@supabase/supabase-js';
 import { Modal, Button, Input, Label, Spinner } from '@/components/ui';
 import { PERMISSIONS } from '@/types';
@@ -70,12 +71,14 @@ export function CreateAccountModal({
     setSaving(true);
     setError('');
 
+    const formattedName = role === 'worker' ? formatRoleName(name.trim(), 'worker') : cleanUserName(name.trim());
+
     try {
       try {
         await callAdminApi('create-user', 'POST', {
           email: email.trim(),
           password,
-          name: name.trim(),
+          name: formattedName,
           role,
           status,
           permissions: role === 'admin' ? permissions : [],
@@ -91,7 +94,7 @@ export function CreateAccountModal({
         const { data: signUpData, error: signUpErr } = await secondaryClient.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { name: name.trim(), role } },
+          options: { data: { name: formattedName, role } },
         });
 
         if (signUpErr) throw signUpErr;
@@ -101,23 +104,24 @@ export function CreateAccountModal({
           try {
             const { error: updErr } = await supabase
               .from('profiles')
-              .update({ role, name: name.trim(), status, permissions: perms })
+              .update({ role, name: formattedName, status, permissions: perms })
               .eq('id', signUpData.user.id);
             if (updErr) {
               await supabase
                 .from('profiles')
-                .update({ name: name.trim(), status, permissions: perms })
+                .update({ name: formattedName, status, permissions: perms })
                 .eq('id', signUpData.user.id);
             }
           } catch {
             await supabase
               .from('profiles')
-              .update({ name: name.trim(), status, permissions: perms })
+              .update({ name: formattedName, status, permissions: perms })
               .eq('id', signUpData.user.id);
           }
 
           if (role === 'worker') {
             try {
+              await supabase.rpc('update_user_name', { p_user_id: signUpData.user.id, p_name: formattedName });
               await supabase.rpc('update_user_role', { p_user_id: signUpData.user.id, p_role: 'worker' });
             } catch {}
           }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { cleanUserName, formatRoleName, isWorkerProfile } from '@/lib/userRoles';
 import type { Profile, Role } from '@/types';
 
 interface AuthState {
@@ -43,8 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: uData } = await supabase.auth.getUser();
         const userMeta = uData?.user?.user_metadata;
         const isWorker =
-          finalProf.role === 'worker' ||
-          (finalProf.permissions || []).includes('worker') ||
+          isWorkerProfile(finalProf) ||
           userMeta?.role === 'worker' ||
           userMeta?.is_worker === true;
 
@@ -59,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch {
             await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
           }
+        } else if (!isWorker && finalProf.role === 'worker') {
+          finalProf = { ...finalProf, role: 'candidate', permissions: (finalProf.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker') };
         }
       } catch {}
       setProfile(finalProf);
@@ -76,8 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { data: uData } = await supabase.auth.getUser();
             const userMeta = uData?.user?.user_metadata;
             const isWorker =
-              finalRetry.role === 'worker' ||
-              (finalRetry.permissions || []).includes('worker') ||
+              isWorkerProfile(finalRetry) ||
               userMeta?.role === 'worker' ||
               userMeta?.is_worker === true;
 
@@ -92,6 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } catch {
                 await supabase.from('profiles').update({ permissions: workerPerms }).eq('id', uid);
               }
+            } else if (!isWorker && finalRetry.role === 'worker') {
+              finalRetry = { ...finalRetry, role: 'candidate', permissions: (finalRetry.permissions || []).filter((p) => p !== 'worker' && p !== 'is_worker') };
             }
           } catch {}
           setProfile(finalRetry);
@@ -141,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string, role: 'candidate' | 'worker' = 'candidate') => {
     let registeredViaApi = false;
+    const formattedName = role === 'worker' ? formatRoleName(name, 'worker') : cleanUserName(name);
 
     // Primary: Register via admin-api edge function with service_role key to guarantee target role is saved in profiles
     try {
@@ -151,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ email, password, name, role }),
+        body: JSON.stringify({ email, password, name: formattedName, role }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -178,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: {
           data: {
-            name,
+            name: formattedName,
             role,
             is_worker: role === 'worker',
           },
@@ -195,18 +199,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const { error: err1 } = await supabase
               .from('profiles')
-              .update({ role, name, permissions: perms })
+              .update({ role, name: formattedName, permissions: perms })
               .eq('id', targetId);
             if (err1) {
               await supabase
                 .from('profiles')
-                .update({ name, permissions: perms })
+                .update({ name: formattedName, permissions: perms })
                 .eq('id', targetId);
             }
           } catch {
             await supabase
               .from('profiles')
-              .update({ name, permissions: perms })
+              .update({ name: formattedName, permissions: perms })
               .eq('id', targetId);
           }
         }
@@ -217,12 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const { error: err2 } = await supabase
               .from('profiles')
-              .update({ role, name, permissions: perms })
+              .update({ role, name: formattedName, permissions: perms })
               .eq('id', authData.user.id);
             if (err2) {
               await supabase
                 .from('profiles')
-                .update({ name, permissions: perms })
+                .update({ name: formattedName, permissions: perms })
                 .eq('id', authData.user.id);
             }
           } catch {}

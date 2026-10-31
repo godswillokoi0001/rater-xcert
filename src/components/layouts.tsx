@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { ThemeToggle } from '@/lib/theme';
+import { cleanUserName } from '@/lib/userRoles';
 import { Spinner } from '@/components/ui';
 import { ClipboardCheck, LogOut, LayoutDashboard, FileText, Users, ShieldCheck, BarChart3, ScrollText, GraduationCap, Briefcase } from 'lucide-react';
 import type { Role } from '@/types';
@@ -98,10 +99,10 @@ export function AdminLayout({ children, current }: { children: ReactNode; curren
           <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-xs font-bold uppercase shrink-0 shadow-xs">
-                {profile.name?.charAt(0) || 'A'}
+                {cleanUserName(profile.name)?.charAt(0) || 'A'}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{profile.name || 'Admin'}</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{cleanUserName(profile.name) || 'Admin'}</p>
                 <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 truncate uppercase tracking-wider">
                   {isSuper ? 'Super Admin' : 'Admin'}
                 </p>
@@ -147,7 +148,7 @@ export function CandidateLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 sm:gap-4">
             <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'Candidate'}</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{cleanUserName(profile.name) || 'Candidate'}</p>
               <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 capitalize">Candidate</p>
             </div>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
@@ -190,7 +191,7 @@ export function WorkerLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 sm:gap-4">
             <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'Worker'}</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{cleanUserName(profile.name) || 'Worker'}</p>
               <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">Verified Worker</p>
             </div>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">

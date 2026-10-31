@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { cleanUserName } from '@/lib/userRoles';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Card, Badge, Spinner, EmptyState, Button, Select } from '@/components/ui';
 import { ReviewAttemptModal } from '@/components/ReviewAttemptModal';
@@ -34,16 +35,33 @@ export function AdminResultsPage() {
     const candidateIds = [...new Set((attemptsData || []).map((a) => a.candidate_id))];
     const candidateMap = new Map<string, { name: string; email: string }>();
     if (candidateIds.length > 0) {
-      const { data: profiles } = await supabase.from('profiles').select('id, name, email').in('id', candidateIds);
-      (profiles || []).forEach((p) => candidateMap.set(p.id, { name: p.name, email: p.email || '' }));
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, name, role')
+        .in('id', candidateIds);
+
+      if (profErr) {
+        console.error('Error fetching candidate profiles in Results:', profErr);
+      }
+
+      (profiles || []).forEach((p) => {
+        const cleaned = cleanUserName(p.name);
+        candidateMap.set(p.id, {
+          name: cleaned || (p.role === 'worker' ? 'Worker' : 'Candidate'),
+          email: '',
+        });
+      });
     }
 
-    const enriched: AttemptWithDetails[] = (attemptsData || []).map((a) => ({
-      ...a,
-      test_title: testMap.get(a.test_id) || 'Unknown',
-      candidate_name: candidateMap.get(a.candidate_id)?.name || 'Unknown',
-      candidate_email: candidateMap.get(a.candidate_id)?.email || '',
-    })) as AttemptWithDetails[];
+    const enriched: AttemptWithDetails[] = (attemptsData || []).map((a) => {
+      const cand = candidateMap.get(a.candidate_id);
+      return {
+        ...a,
+        test_title: testMap.get(a.test_id) || 'Unknown Assessment',
+        candidate_name: cand?.name || 'Candidate',
+        candidate_email: cand?.email || '',
+      };
+    }) as AttemptWithDetails[];
 
     setAttempts(enriched);
     setTests((testsData || []) as Test[]);
@@ -310,7 +328,7 @@ export function AdminResultsPage() {
                     <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-5 py-3.5">
                         <p className="text-sm font-medium text-slate-900 dark:text-white">
-                          {a.candidate_name || 'Unknown'}
+                          {cleanUserName(a.candidate_name) || 'Candidate'}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {a.candidate_email || '—'}

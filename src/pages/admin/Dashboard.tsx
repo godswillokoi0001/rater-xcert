@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isWorkerProfile } from '@/lib/userRoles';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { AdminLayout, RouteGuard } from '@/components/layouts';
@@ -16,21 +17,24 @@ export function AdminDashboard() {
   const [showCreateAccount, setShowCreateAccount] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
-    const [{ data: candidates }, { data: workers }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
-      supabase.from('profiles').select('id').eq('role', 'candidate'),
-      supabase.from('profiles').select('id').eq('role', 'worker'),
+    const [{ data: profs }, { data: tests }, { data: attempts }, { data: logs }] = await Promise.all([
+      supabase.from('profiles').select('id, name, role, permissions'),
       supabase.from('tests').select('id'),
       supabase.from('attempts').select('score'),
       supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(8),
     ]);
+
+    const nonAdmins = (profs || []).filter((p) => p.role !== 'admin' && p.role !== 'super_admin');
+    const workerCount = nonAdmins.filter((p) => isWorkerProfile(p)).length;
+    const candidateCount = nonAdmins.filter((p) => !isWorkerProfile(p)).length;
 
     const avgScore = attempts && attempts.length > 0
       ? Math.round((attempts.reduce((sum, a) => sum + Number(a.score), 0) / attempts.length) * 10) / 10
       : 0;
 
     setStats({
-      candidates: candidates?.length || 0,
-      workers: workers?.length || 0,
+      candidates: candidateCount,
+      workers: workerCount,
       tests: tests?.length || 0,
       avgScore,
       attempts: attempts?.length || 0,

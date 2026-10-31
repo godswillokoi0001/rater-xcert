@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
+import { cleanUserName } from '@/lib/userRoles';
 import { Badge, Button, Spinner, Card } from '@/components/ui';
 import { printAttemptPdf } from '@/lib/printResult';
 import type { ReviewData, QuestionType, Answer } from '@/types';
@@ -82,7 +83,7 @@ export function ReviewAttemptModal({
 
         const [{ data: test }, { data: candidateProfile }, { data: sections }] = await Promise.all([
           supabase.from('tests').select('title, pass_mark').eq('id', attempt.test_id).single(),
-          supabase.from('profiles').select('name, email, role, permissions').eq('id', attempt.candidate_id).single(),
+          supabase.from('profiles').select('name, role, permissions').eq('id', attempt.candidate_id).maybeSingle(),
           supabase.from('sections').select('*').eq('test_id', attempt.test_id).order('order_index', { ascending: true }),
         ]);
 
@@ -103,8 +104,8 @@ export function ReviewAttemptModal({
           attempt,
           test_title: test?.title || 'Assessment',
           pass_mark: test?.pass_mark ?? 70,
-          candidate_name: candidateProfile?.name || 'User',
-          candidate_email: candidateProfile?.email || '',
+          candidate_name: cleanUserName(candidateProfile?.name) || 'Candidate',
+          candidate_email: '',
           candidate_role: candidateProfile?.role || 'candidate',
           sections: sections || [],
           questions: questions || [],
