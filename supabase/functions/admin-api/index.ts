@@ -20,7 +20,8 @@ Deno.serve(async (req: Request) => {
     // Route: POST /bootstrap — one-time super-admin setup (no auth required)
     if (path === "bootstrap" && method === "POST") {
       const { email, password, name } = await req.json();
-      if (!email || !password) {
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      if (!normalizedEmail || !password) {
         return new Response(JSON.stringify({ error: "Email and password required" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -48,7 +49,7 @@ Deno.serve(async (req: Request) => {
 
       // Create the auth user
       const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
         user_metadata: { name: name || "Super Admin" },
@@ -75,7 +76,8 @@ Deno.serve(async (req: Request) => {
     // Route: POST /register — public registration for candidate or worker with guaranteed role persistence
     if (path === "register" && method === "POST") {
       const { email, password, name, role } = await req.json();
-      if (!email || !password) {
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      if (!normalizedEmail || !password) {
         return new Response(JSON.stringify({ error: "Email and password required" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -301,7 +303,7 @@ Deno.serve(async (req: Request) => {
       );
 
       const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
         user_metadata: { name: name || email.split("@")[0], role: targetRole },
@@ -414,7 +416,8 @@ Deno.serve(async (req: Request) => {
         });
       }
       const { email, password, name, permissions } = await req.json();
-      if (!email || !password) {
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      if (!normalizedEmail || !password) {
         return new Response(JSON.stringify({ error: "Email and password required" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -427,7 +430,7 @@ Deno.serve(async (req: Request) => {
       );
 
       const { data: newUser, error: createErr } = await adminClient.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
         user_metadata: { name },

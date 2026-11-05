@@ -21,7 +21,7 @@ export function AdminAuthPage() {
 
     try {
       const { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
       });
       if (signInErr) throw signInErr;

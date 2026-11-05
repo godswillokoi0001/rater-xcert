@@ -40,7 +40,7 @@ const adminNav = [
   { path: '/admin/worker-tests', label: 'Workers Tests', icon: Briefcase, perm: 'can-manage-tests' },
   { path: '/admin/users', label: 'Candidates', icon: Users, perm: 'can-manage-users' },
   { path: '/admin/workers', label: 'Workers', icon: Briefcase, perm: 'can-manage-users' },
-  { path: '/admin/admins', label: 'Admins', icon: ShieldCheck, perm: null, superOnly: true },
+  { path: '/admin/admins', label: 'Admins', icon: ShieldCheck, perm: 'can-manage-admins' },
   { path: '/admin/results', label: 'Results', icon: BarChart3, perm: 'can-view-reports' },
   { path: '/admin/audit', label: 'Audit Log', icon: ScrollText, perm: null },
 ];
@@ -53,7 +53,6 @@ export function AdminLayout({ children, current }: { children: ReactNode; curren
   const hasPerm = (p: string | null) => !p || isSuper || profile.permissions.includes(p);
 
   const navItems = adminNav.filter((item) => {
-    if (item.superOnly && !isSuper) return false;
     return hasPerm(item.perm);
   });
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useAuth } from '@/lib/auth';
 import { supabase, callAdminApi } from '@/lib/supabase';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Label, Modal, Spinner, EmptyState, ConfirmDialog } from '@/components/ui';
@@ -8,6 +9,7 @@ import type { Profile } from '@/types';
 import { ShieldCheck, Plus, Trash2, UserCheck, UserX, Edit3, Mail, Key } from 'lucide-react';
 
 export function AdminAdminsPage() {
+  const { profile: currentProfile } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -40,10 +42,10 @@ export function AdminAdminsPage() {
     }
   };
 
-  if (loading) return <RouteGuard roles={['super_admin']}><AdminLayout current="/admin/admins"><div className="flex justify-center py-20"><Spinner size={32} /></div></AdminLayout></RouteGuard>;
+  if (loading) return <RouteGuard roles={['admin', 'super_admin']}><AdminLayout current="/admin/admins"><div className="flex justify-center py-20"><Spinner size={32} /></div></AdminLayout></RouteGuard>;
 
   return (
-    <RouteGuard roles={['super_admin']}>
+    <RouteGuard roles={['admin', 'super_admin']}>
       <AdminLayout current="/admin/admins">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -88,10 +90,14 @@ export function AdminAdminsPage() {
                           )}
                         </div>
                         <Button size="sm" variant="ghost" onClick={() => setEditPerms(p)} title="Edit permissions"><Key size={14} /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleToggleStatus(p)} title={p.status === 'active' ? 'Disable' : 'Enable'}>
-                          {p.status === 'active' ? <UserX size={14} className="text-amber-600" /> : <UserCheck size={14} className="text-green-600" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(p)}><Trash2 size={14} className="text-red-500" /></Button>
+                        {currentProfile?.role === 'super_admin' && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => handleToggleStatus(p)} title={p.status === 'active' ? 'Disable' : 'Enable'}>
+                              {p.status === 'active' ? <UserX size={14} className="text-amber-600" /> : <UserCheck size={14} className="text-green-600" />}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(p)}><Trash2 size={14} className="text-red-500" /></Button>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

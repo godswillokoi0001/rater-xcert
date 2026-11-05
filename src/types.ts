@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   'can-manage-users',
   'can-manage-tests',
   'can-view-reports',
+  'can-manage-admins',
 ] as const;
 
 export type Permission = typeof PERMISSIONS[number];
