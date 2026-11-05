@@ -258,7 +258,8 @@ Deno.serve(async (req: Request) => {
     // Route: POST /create-user or /create-account — super_admin (or authorized admin) creates any user account
     if ((path === "create-user" || path === "create-account") && method === "POST") {
       const { email, password, name, role, permissions, status } = await req.json();
-      if (!email || !password || !role) {
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      if (!normalizedEmail || !password || !role) {
         return new Response(JSON.stringify({ error: "Email, password, and role are required" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -306,10 +307,34 @@ Deno.serve(async (req: Request) => {
         email: normalizedEmail,
         password,
         email_confirm: true,
-        user_metadata: { name: name || email.split("@")[0], role: targetRole },
+        user_metadata: { name: name || normalizedEmail.split("@")[0], role: targetRole },
       });
 
-      if (createErr || !newUser.user) {
+      let targetUser = newUser?.user;
+      let createdNewUser = Boolean(targetUser);
+
+      // Repair an account left behind by an interrupted or older creation flow.
+      if (!targetUser && createErr) {
+        const { data: users } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+        const existingUser = users?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail);
+        if (existingUser) {
+          const { data: repairedUser, error: repairErr } = await adminClient.auth.admin.updateUserById(existingUser.id, {
+            password,
+            email_confirm: true,
+            user_metadata: { name: name || normalizedEmail.split("@")[0], role: targetRole },
+          });
+          if (repairErr || !repairedUser.user) {
+            return new Response(JSON.stringify({ error: repairErr?.message || "Failed to repair existing user account" }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          targetUser = repairedUser.user;
+          createdNewUser = false;
+        }
+      }
+
+      if (!targetUser) {
         return new Response(JSON.stringify({ error: createErr?.message || "Failed to create user account" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -323,36 +348,33 @@ Deno.serve(async (req: Request) => {
         ? ["worker"]
         : [];
 
-      const { error: updErr } = await adminClient
+      const { error: profileErr } = await adminClient
         .from("profiles")
-        .update({
+        .upsert({
+          id: targetUser.id,
           role: targetRole,
-          name: name || email.split("@")[0],
+          name: name || normalizedEmail.split("@")[0],
           status: userStatus,
           permissions: userPerms,
-        })
-        .eq("id", newUser.user.id);
+        }, { onConflict: "id" });
 
-      if (updErr) {
-        await adminClient
-          .from("profiles")
-          .update({
-            name: name || email.split("@")[0],
-            status: userStatus,
-            permissions: userPerms,
-          })
-          .eq("id", newUser.user.id);
+      if (profileErr) {
+        if (createdNewUser) await adminClient.auth.admin.deleteUser(targetUser.id);
+        return new Response(JSON.stringify({ error: `Failed to create account profile: ${profileErr.message}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      await logAudit("create_account", "user", newUser.user.id, {
-        email,
-        name: name || email.split("@")[0],
+      await logAudit("create_account", "user", targetUser.id, {
+        email: normalizedEmail,
+        name: name || normalizedEmail.split("@")[0],
         role: targetRole,
         status: userStatus,
         permissions: targetRole === "admin" ? userPerms : undefined,
       });
 
-      return new Response(JSON.stringify({ success: true, id: newUser.user.id }), {
+      return new Response(JSON.stringify({ success: true, id: targetUser.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

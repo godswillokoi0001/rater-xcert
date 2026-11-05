@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { supabase, callAdminApi } from '@/lib/supabase';
+import { callAdminApi } from '@/lib/supabase';
 import { formatRoleName, cleanUserName, setUserRole } from '@/lib/userRoles';
-import { createClient } from '@supabase/supabase-js';
 import { Modal, Button, Input, Label, Spinner } from '@/components/ui';
 import { PERMISSIONS } from '@/types';
 import type { Role } from '@/types';
@@ -74,66 +73,14 @@ export function CreateAccountModal({
     const formattedName = role === 'worker' ? formatRoleName(name.trim(), 'worker') : cleanUserName(name.trim());
 
     try {
-      try {
-        await callAdminApi('create-user', 'POST', {
-          email: email.trim(),
-          password,
-          name: formattedName,
-          role,
-          status,
-          permissions: role === 'admin' ? permissions : [],
-        });
-      } catch (apiErr) {
-        // Fallback: If edge function is not deployed or network error
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-        const secondaryClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-
-        const { data: signUpData, error: signUpErr } = await secondaryClient.auth.signUp({
-          email: email.trim(),
-          password,
-          options: { data: { name: formattedName, role } },
-        });
-
-        if (signUpErr) throw signUpErr;
-
-        if (signUpData.user) {
-          const perms = role === 'admin' ? permissions : role === 'worker' ? ['worker'] : [];
-          try {
-            const { error: updErr } = await supabase
-              .from('profiles')
-              .update({ role, name: formattedName, status, permissions: perms })
-              .eq('id', signUpData.user.id);
-            if (updErr) {
-              await supabase
-                .from('profiles')
-                .update({ name: formattedName, status, permissions: perms })
-                .eq('id', signUpData.user.id);
-            }
-          } catch {
-            await supabase
-              .from('profiles')
-              .update({ name: formattedName, status, permissions: perms })
-              .eq('id', signUpData.user.id);
-          }
-
-          if (role === 'worker') {
-            try {
-              await supabase.rpc('update_user_name', { p_user_id: signUpData.user.id, p_name: formattedName });
-              await supabase.rpc('update_user_role', { p_user_id: signUpData.user.id, p_role: 'worker' });
-            } catch {}
-          }
-
-          if (status === 'active') {
-            await supabase.rpc('update_user_status', { p_user_id: signUpData.user.id, p_status: 'active' });
-          }
-          if (role === 'admin' && permissions.length > 0) {
-            await supabase.rpc('update_admin_permissions', { p_admin_id: signUpData.user.id, p_permissions: permissions });
-          }
-        }
-      }
+      await callAdminApi('create-user', 'POST', {
+        email: email.trim().toLowerCase(),
+        password,
+        name: formattedName,
+        role,
+        status,
+        permissions: role === 'admin' ? permissions : [],
+      });
 
       onCreated();
       onClose();
