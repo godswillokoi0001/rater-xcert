@@ -1,7 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
+import {
+  applyManualGradingToAttempt,
+  stripManualGradingTag,
+  cleanNotificationMessage,
+} from '@/lib/attemptGrading';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { CandidateLayout } from '@/components/layouts';
@@ -101,9 +105,18 @@ export function CandidateDashboard() {
       return target === 'all' || target === 'candidate';
     });
 
+    const enrichedAttempts = attemptsWithTitles.map((a) => applyManualGradingToAttempt(a));
+    const cleanedNotifs = ((notifData || []) as Notification[]).map((n) => {
+      const cleaned = cleanNotificationMessage(n.message);
+      if (cleaned !== n.message) {
+        supabase.from('notifications').update({ message: cleaned }).eq('id', n.id).then();
+      }
+      return { ...n, message: cleaned };
+    });
+
     setTests(eligibleTests);
-    setAttempts(attemptsWithTitles);
-    setNotifications((notifData || []) as Notification[]);
+    setAttempts(enrichedAttempts);
+    setNotifications(cleanedNotifs);
     setRetakeInfo(retakeMap);
     setLoading(false);
   }, [user]);
@@ -425,7 +438,7 @@ export function CandidateDashboard() {
                               <MessageSquare size={14} className="text-slate-400 mt-0.5 shrink-0" />
                               <div>
                                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Admin Notes</p>
-                                <p className="text-sm text-slate-700 dark:text-slate-300">{a.admin_notes}</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-300">{stripManualGradingTag(a.admin_notes)}</p>
                               </div>
                             </div>
                           </td>

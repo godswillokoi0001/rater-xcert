@@ -1,7 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
+import {
+  applyManualGradingToAttempt,
+  stripManualGradingTag,
+  cleanNotificationMessage,
+} from '@/lib/attemptGrading';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { WorkerLayout } from '@/components/layouts';
@@ -98,9 +102,18 @@ export function WorkerDashboard() {
       return isWorkerTest;
     });
 
+    const enrichedAttempts = attemptsWithTitles.map((a) => applyManualGradingToAttempt(a));
+    const cleanedNotifs = ((notifData || []) as Notification[]).map((n) => {
+      const cleaned = cleanNotificationMessage(n.message);
+      if (cleaned !== n.message) {
+        supabase.from('notifications').update({ message: cleaned }).eq('id', n.id).then();
+      }
+      return { ...n, message: cleaned };
+    });
+
     setTests(eligibleTests);
-    setAttempts(attemptsWithTitles);
-    setNotifications((notifData || []) as Notification[]);
+    setAttempts(enrichedAttempts);
+    setNotifications(cleanedNotifs);
     setRetakeInfo(retakeMap);
     setLoading(false);
   }, [user]);
@@ -416,58 +429,80 @@ export function WorkerDashboard() {
                   const isExpanded = expandedAttempt === attempt.id;
 
                   return (
-                    <tr key={attempt.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="px-5 py-3.5 text-sm font-semibold text-slate-900 dark:text-white">
-                        {attempt.test_title}
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400 hidden sm:table-cell">
-                        {attempt.submitted_at
-                          ? new Date(attempt.submitted_at).toLocaleDateString(undefined, {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                            })
-                          : '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-sm font-bold text-slate-900 dark:text-white">
-                        {isReleased ? `${attempt.score}%` : '—'}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {isReleased ? (
-                          attempt.pass_or_fail === 'pass' ? (
-                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 size={15} /> Standard Met
-                            </span>
+                    <>
+                      <tr key={attempt.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-5 py-3.5 text-sm font-semibold text-slate-900 dark:text-white">
+                          {attempt.test_title}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400 hidden sm:table-cell">
+                          {attempt.submitted_at
+                            ? new Date(attempt.submitted_at).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })
+                            : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm font-bold text-slate-900 dark:text-white">
+                          {isReleased ? `${attempt.score}%` : '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {isReleased ? (
+                            attempt.pass_or_fail === 'pass' ? (
+                              <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 size={15} /> Standard Met
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-400">
+                                <XCircle size={15} /> Standard Not Met
+                              </span>
+                            )
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-400">
-                              <XCircle size={15} /> Standard Not Met
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium">Under Review</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {attempt.review_status === 'pending_review' && (
-                          <Badge color="amber"><Clock size={11} className="mr-1" /> Pending</Badge>
-                        )}
-                        {attempt.review_status === 'reviewed' && (
-                          <Badge color="blue"><Eye size={11} className="mr-1" /> In Review</Badge>
-                        )}
-                        {attempt.review_status === 'released' && (
-                          <Badge color="purple"><CheckCircle2 size={11} className="mr-1" /> Verified</Badge>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <button
-                          onClick={() => setExpandedAttempt(isExpanded ? null : attempt.id)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700"
-                        >
-                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                          <span>{isExpanded ? 'Hide' : 'View'}</span>
-                        </button>
-                      </td>
-                    </tr>
+                            <span className="text-xs text-slate-400 font-medium">Under Review</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {attempt.review_status === 'pending_review' && (
+                            <Badge color="amber"><Clock size={11} className="mr-1" /> Pending</Badge>
+                          )}
+                          {attempt.review_status === 'reviewed' && (
+                            <Badge color="blue"><Eye size={11} className="mr-1" /> In Review</Badge>
+                          )}
+                          {attempt.review_status === 'released' && (
+                            <Badge color="purple"><CheckCircle2 size={11} className="mr-1" /> Verified</Badge>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={() => setExpandedAttempt(isExpanded ? null : attempt.id)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700"
+                          >
+                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                            <span>{isExpanded ? 'Hide' : 'View'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${attempt.id}-expanded`} className="bg-slate-50/50 dark:bg-slate-800/30">
+                          <td colSpan={6} className="px-5 py-3">
+                            <div className="flex flex-col gap-1.5 pl-2">
+                              {isReleased && stripManualGradingTag(attempt.admin_notes) && (
+                                <div className="flex items-start gap-2">
+                                  <MessageSquare size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Examiner Notes</p>
+                                    <p className="text-sm text-slate-700 dark:text-slate-300">{stripManualGradingTag(attempt.admin_notes)}</p>
+                                  </div>
+                                </div>
+                              )}
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Result: {attempt.correct_answers} of {attempt.total_questions} questions correct ({attempt.score}%)
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   );
                 })}
               </tbody>

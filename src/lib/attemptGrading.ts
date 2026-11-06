@@ -20,6 +20,66 @@ export const MANUAL_GRADING_TAG_PREFIX = '[MANUAL_GRADING:';
 export const MANUAL_GRADING_TAG_SUFFIX = ']';
 
 /**
+ * Strips [MANUAL_GRADING:...] tag from any string, returning only clean human notes.
+ */
+export function stripManualGradingTag(rawNotes?: string | null): string {
+  if (!rawNotes) return '';
+  if (!rawNotes.includes(MANUAL_GRADING_TAG_PREFIX)) return rawNotes.trim();
+
+  const startIndex = rawNotes.indexOf(MANUAL_GRADING_TAG_PREFIX);
+  const contentStart = startIndex + MANUAL_GRADING_TAG_PREFIX.length;
+  const endIndex = rawNotes.indexOf(MANUAL_GRADING_TAG_SUFFIX, contentStart);
+  if (endIndex === -1) return rawNotes.trim();
+
+  const clean = (rawNotes.slice(0, startIndex) + rawNotes.slice(endIndex + MANUAL_GRADING_TAG_SUFFIX.length)).trim();
+  return clean;
+}
+
+/**
+ * Sanitizes candidate notification messages so that:
+ * 1. The raw [MANUAL_GRADING:...] JSON is never shown to candidates.
+ * 2. If the message says "is 0%", it is replaced with the actual manual score (e.g. "is 69%").
+ * 3. Human admin notes (e.g. "not good enough") are preserved cleanly.
+ */
+export function cleanNotificationMessage(rawMessage: string): string {
+  if (!rawMessage || typeof rawMessage !== 'string') return rawMessage || '';
+  if (!rawMessage.includes(MANUAL_GRADING_TAG_PREFIX)) return rawMessage;
+
+  let msg = rawMessage;
+  try {
+    const startIndex = msg.indexOf(MANUAL_GRADING_TAG_PREFIX);
+    const contentStart = startIndex + MANUAL_GRADING_TAG_PREFIX.length;
+    const endIndex = msg.indexOf(MANUAL_GRADING_TAG_SUFFIX, contentStart);
+
+    if (endIndex !== -1) {
+      const jsonStr = msg.slice(contentStart, endIndex);
+      const parsed = JSON.parse(jsonStr) as ManualGradingPayload;
+
+      // If the message has score 0% and the tag has the actual score, update the score text in the message
+      if (typeof parsed.score === 'number') {
+        const passText = parsed.pass_or_fail === 'pass' ? 'Passed' : 'Did Not Pass';
+        msg = msg.replace(/is\s+0%\s*\([^)]*\)/gi, `is ${parsed.score}% (${passText})`);
+        msg = msg.replace(/is\s+0%/gi, `is ${parsed.score}%`);
+      }
+
+      // Remove the manual grading tag
+      const beforeTag = msg.slice(0, startIndex);
+      const afterTag = msg.slice(endIndex + MANUAL_GRADING_TAG_SUFFIX.length);
+      msg = `${beforeTag}${afterTag}`;
+
+      // Clean up "Admin notes: " if nothing follows it
+      msg = msg.replace(/Admin notes:\s*$/i, '').trim();
+      // Normalize whitespace
+      msg = msg.replace(/\s{2,}/g, ' ').trim();
+    }
+  } catch (e) {
+    console.warn('Failed to sanitize notification message:', e);
+  }
+
+  return msg;
+}
+
+/**
  * Encodes manual grading data into the admin_notes string so it is reliably
  * stored in the PostgreSQL database via release_attempt and readable by all roles.
  */

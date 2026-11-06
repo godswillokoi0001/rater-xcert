@@ -469,7 +469,11 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                         <p className="font-semibold text-slate-900 dark:text-white text-sm">
                           {att.test_title}
                         </p>
-                        {att.pass_or_fail === 'pass' ? (
+                        {att.review_status === 'pending_review' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                            <Clock size={12} /> Pending Review
+                          </span>
+                        ) : att.pass_or_fail === 'pass' ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
                             <CheckCircle2 size={13} /> Pass
                           </span>
@@ -483,8 +487,12 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                         </Badge>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Submitted: {att.submitted_at ? new Date(att.submitted_at).toLocaleString() : 'In Progress'} • Score:{' '}
-                        <strong className="text-slate-700 dark:text-slate-300">{Number(att.score)}%</strong> ({att.correct_answers}/{att.total_questions} correct)
+                        Submitted: {att.submitted_at ? new Date(att.submitted_at).toLocaleString() : 'In Progress'}
+                        {att.review_status === 'pending_review' ? (
+                          <> • <span className="text-amber-600 dark:text-amber-400 font-medium">Awaiting manual grading</span></>
+                        ) : (
+                          <> • Score: <strong className="text-slate-700 dark:text-slate-300">{Number(att.score)}%</strong> ({att.correct_answers}/{att.total_questions} correct)</>
+                        )}
                       </p>
                     </div>
 

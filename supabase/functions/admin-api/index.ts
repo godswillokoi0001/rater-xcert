@@ -742,6 +742,16 @@ Deno.serve(async (req: Request) => {
       const candidateName = candidateProfile?.name || "Candidate";
       const testTitle = test?.title || "Certification Exam";
 
+      const finalScore = score !== undefined ? score : attempt.score;
+      const finalPassOrFail = passOrFail !== undefined ? passOrFail : attempt.pass_or_fail;
+      const finalCorrect = correctAnswers !== undefined ? correctAnswers : attempt.correct_answers;
+      const finalTotal = totalQuestions !== undefined ? totalQuestions : attempt.total_questions;
+
+      // Clean admin notes of any internal tags so candidates never see raw JSON
+      const cleanCandidateNotes = typeof adminNotes === "string"
+        ? adminNotes.replace(/\[MANUAL_GRADING:[^\]]*\]/g, "").trim()
+        : "";
+
       // Release the score and update manual grades/answers
       const updateData: Record<string, unknown> = {
         review_status: "released",
@@ -785,7 +795,7 @@ Deno.serve(async (req: Request) => {
         user_id: attempt.candidate_id,
         type: "result_released",
         title: `Results Available: ${testTitle}`,
-        message: `Your score for ${testTitle} is ${attempt.score}% (${attempt.pass_or_fail === "pass" ? "Passed" : "Did Not Pass"}).${grantRetake ? ` You have been granted ${retakeCount || 1} retake(s) for this test.` : ""}${adminNotes ? ` Admin notes: ${adminNotes}` : ""}`,
+        message: `Your score for ${testTitle} is ${finalScore}% (${finalPassOrFail === "pass" ? "Passed" : "Did Not Pass"}).${grantRetake ? ` You have been granted ${retakeCount || 1} retake(s) for this test.` : ""}${cleanCandidateNotes ? ` Admin notes: ${cleanCandidateNotes}` : ""}`,
       });
 
       // Send email notification to candidate via Resend if API key is configured
@@ -805,15 +815,15 @@ Deno.serve(async (req: Request) => {
                   Your results for <strong>${testTitle}</strong> have been reviewed and released by the administrator.
                 </p>
                 <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
-                  <p style="font-size: 36px; font-weight: bold; color: ${attempt.pass_or_fail === "pass" ? "#16a34a" : "#dc2626"}; margin: 0;">
-                    ${attempt.score}%
+                  <p style="font-size: 36px; font-weight: bold; color: ${finalPassOrFail === "pass" ? "#16a34a" : "#dc2626"}; margin: 0;">
+                    ${finalScore}%
                   </p>
-                  <p style="color: #64748b; margin: 4px 0 0;">${attempt.correct_answers} out of ${attempt.total_questions} correct</p>
-                  <p style="font-size: 18px; font-weight: bold; color: ${attempt.pass_or_fail === "pass" ? "#16a34a" : "#dc2626"}; margin: 8px 0 0;">
-                    ${attempt.pass_or_fail === "pass" ? "PASSED" : "Did Not Pass"}
+                  <p style="color: #64748b; margin: 4px 0 0;">${finalCorrect} out of ${finalTotal} correct</p>
+                  <p style="font-size: 18px; font-weight: bold; color: ${finalPassOrFail === "pass" ? "#16a34a" : "#dc2626"}; margin: 8px 0 0;">
+                    ${finalPassOrFail === "pass" ? "PASSED" : "Did Not Pass"}
                   </p>
                 </div>
-                ${adminNotes ? `<div style="background: #fefce8; border-left: 4px solid #ca8a04; padding: 12px 16px; margin: 16px 0; border-radius: 4px;"><p style="color: #713f12; margin: 0; font-size: 14px;"><strong>Admin Notes:</strong> ${adminNotes}</p></div>` : ""}
+                ${cleanCandidateNotes ? `<div style="background: #fefce8; border-left: 4px solid #ca8a04; padding: 12px 16px; margin: 16px 0; border-radius: 4px;"><p style="color: #713f12; margin: 0; font-size: 14px;"><strong>Admin Notes:</strong> ${cleanCandidateNotes}</p></div>` : ""}
                 <p style="color: #475569; font-size: 14px; line-height: 1.6;">
                   Please log in to your Rater X account to view your detailed results.${grantRetake ? ` You have been granted ${retakeCount || 1} retake(s) for this test.` : ""}
                 </p>

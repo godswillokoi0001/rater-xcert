@@ -340,15 +340,34 @@ export function AdminResultsPage() {
                         {a.test_title}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
-                          {Number(a.score)}%
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
-                          ({a.correct_answers}/{a.total_questions})
-                        </span>
+                        {a.review_status === 'pending_review' ? (
+                          <div className="flex flex-col">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                              <Clock size={13} /> Awaiting Review
+                            </span>
+                            {Number(a.score) > 0 && (
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                (Auto: {Number(a.score)}%)
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
+                              {Number(a.score)}%
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
+                              ({a.correct_answers}/{a.total_questions})
+                            </span>
+                          </>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
-                        {a.pass_or_fail === 'pass' ? (
+                        {a.review_status === 'pending_review' ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
+                            <Clock size={13} /> Pending Review
+                          </span>
+                        ) : a.pass_or_fail === 'pass' ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
                             <CheckCircle2 size={14} /> Pass
                           </span>

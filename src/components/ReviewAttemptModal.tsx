@@ -6,6 +6,8 @@ import {
   decodeManualGrading,
   saveManualGradingToStorage,
   applyManualGradingToAttempt,
+  stripManualGradingTag,
+  cleanNotificationMessage,
   type ManualGradingPayload,
 } from '@/lib/attemptGrading';
 import { Badge, Button, Spinner, Card } from '@/components/ui';
@@ -242,7 +244,35 @@ export function ReviewAttemptModal({
       // 1. Immediately cache in localStorage
       saveManualGradingToStorage(reviewData.attempt.id, manualPayload);
 
-      // 2. Guaranteed audit log in PostgreSQL database
+      // 2. PRIMARY PERSISTENCE IN POSTGRESQL: Call grade_attempt_answers RPC!
+      // This SECURITY DEFINER function updates answers, score, pass_or_fail, correct_answers, total_questions, admin_notes directly in database.
+      try {
+        const { error: rpcErr } = await supabase.rpc('grade_attempt_answers', {
+          p_attempt_id: reviewData.attempt.id,
+          p_answers: updatedAnswers,
+          p_score: finalScore,
+          p_pass_or_fail: passOrFail,
+          p_correct_answers: Math.round(totalCorrectDisplay),
+          p_total_questions: totalQuestions,
+          p_admin_notes: formattedNotes,
+        });
+        if (rpcErr) {
+          console.warn('grade_attempt_answers RPC notice:', rpcErr);
+        }
+      } catch (rpcEx) {
+        console.warn('grade_attempt_answers RPC exception:', rpcEx);
+      }
+
+      // If all manual text questions have been graded, mark reviewed
+      const textQuestions = reviewData.questions.filter((q) => q.question_type === 'text_short' || q.question_type === 'text_long');
+      const gradedCount = textQuestions.filter((q) => manualGrades[q.id] !== undefined).length;
+      if (textQuestions.length === 0 || gradedCount === textQuestions.length) {
+        try {
+          await supabase.rpc('review_attempt', { p_attempt_id: reviewData.attempt.id });
+        } catch {}
+      }
+
+      // 3. Guaranteed audit log in PostgreSQL database
       try {
         await supabase.rpc('log_audit', {
           p_action: 'save_manual_grades',
@@ -261,7 +291,7 @@ export function ReviewAttemptModal({
         console.warn('log_audit warning:', auditErr);
       }
 
-      // 3. Update via Admin API service role (bypasses RLS)
+      // 4. Update via Admin API service role (if available)
       try {
         await callAdminApi('save-manual-grades', 'POST', {
           attemptId: reviewData.attempt.id,
@@ -276,7 +306,7 @@ export function ReviewAttemptModal({
         console.warn('save-manual-grades API call notice:', apiErr);
       }
 
-      // 4. If attempt has already been released, save notes via release_attempt RPC directly in PostgreSQL
+      // 5. If attempt has already been released, save notes via release_attempt RPC directly in PostgreSQL
       if (reviewData.attempt.review_status === 'released') {
         try {
           await supabase.rpc('release_attempt', {
@@ -289,21 +319,6 @@ export function ReviewAttemptModal({
         }
       }
 
-      // 5. Direct Supabase client update attempt
-      try {
-        await supabase
-          .from('attempts')
-          .update({
-            answers: updatedAnswers,
-            score: finalScore,
-            pass_or_fail: passOrFail,
-            correct_answers: Math.round(totalCorrectDisplay),
-            total_questions: totalQuestions,
-            admin_notes: formattedNotes,
-          })
-          .eq('id', reviewData.attempt.id);
-      } catch {}
-
       setReviewData({
         ...reviewData,
         attempt: {
@@ -313,7 +328,7 @@ export function ReviewAttemptModal({
           pass_or_fail: passOrFail,
           correct_answers: Math.round(totalCorrectDisplay),
           total_questions: totalQuestions,
-          admin_notes: adminNotes,
+          admin_notes: formattedNotes,
         },
       });
 
@@ -369,9 +384,26 @@ export function ReviewAttemptModal({
       const { data: authData } = await supabase.auth.getUser();
       const currentAdminId = authData?.user?.id || null;
 
-      // 1. PRIMARY PERSISTENCE IN POSTGRESQL: Call release_attempt RPC!
-      // release_attempt is a SECURITY DEFINER function in PostgreSQL that updates:
-      // review_status = 'released', released_at = now(), released_by = auth.uid(), admin_notes = p_admin_notes
+      // 1. PRIMARY PERSISTENCE IN POSTGRESQL: Save scores and answers via grade_attempt_answers FIRST!
+      // This guarantees that PostgreSQL attempts row already has the correct score before release.
+      try {
+        const { error: gradeErr } = await supabase.rpc('grade_attempt_answers', {
+          p_attempt_id: reviewData.attempt.id,
+          p_answers: updatedAnswers,
+          p_score: finalScore,
+          p_pass_or_fail: passOrFail,
+          p_correct_answers: Math.round(totalCorrectDisplay),
+          p_total_questions: totalQuestions,
+          p_admin_notes: formattedNotes,
+        });
+        if (gradeErr) {
+          console.warn('grade_attempt_answers in release notice:', gradeErr);
+        }
+      } catch (gradeEx) {
+        console.warn('grade_attempt_answers exception:', gradeEx);
+      }
+
+      // 2. Call release_attempt RPC in PostgreSQL to finalize status as 'released'
       try {
         const { error: rpcErr } = await supabase.rpc('release_attempt', {
           p_attempt_id: reviewData.attempt.id,
@@ -385,7 +417,10 @@ export function ReviewAttemptModal({
         console.warn('release_attempt RPC notice:', rpcEx);
       }
 
-      // 2. Call Admin API service role to update score, answers, pass_or_fail directly on attempts table
+      // 3. Call Admin API service role to trigger candidate notifications & email
+      // CRITICAL: We pass clean adminNotes.trim() to callAdminApi so the candidate notification and email
+      // NEVER contain the raw [MANUAL_GRADING:...] JSON tag!
+      const cleanAdminNotes = adminNotes.trim();
       try {
         await callAdminApi('release-attempt', 'POST', {
           attemptId: reviewData.attempt.id,
@@ -394,7 +429,7 @@ export function ReviewAttemptModal({
           correctAnswers: Math.round(totalCorrectDisplay),
           totalQuestions,
           answers: updatedAnswers,
-          adminNotes: formattedNotes,
+          adminNotes: cleanAdminNotes,
           grantRetake,
           retakeCount: grantRetake ? retakeCount : 0,
         });
@@ -402,7 +437,7 @@ export function ReviewAttemptModal({
         console.warn('Admin API release-attempt notice:', apiErr);
       }
 
-      // 3. Log audit action in PostgreSQL
+      // 4. Log audit action in PostgreSQL
       try {
         await supabase.rpc('log_audit', {
           p_action: 'release_attempt',
@@ -414,13 +449,13 @@ export function ReviewAttemptModal({
             correct_answers: Math.round(totalCorrectDisplay),
             total_questions: totalQuestions,
             manual_grades: manualGrades,
-            admin_notes: adminNotes,
+            admin_notes: cleanAdminNotes,
             grant_retake: grantRetake,
           },
         });
       } catch {}
 
-      // 4. Grant retake if requested
+      // 5. Grant retake if requested
       if (grantRetake) {
         try {
           await supabase.from('test_unlocks').upsert(
@@ -439,34 +474,16 @@ export function ReviewAttemptModal({
         }
       }
 
-      // 5. In-app notification
+      // 6. In-app notification with clean notes and accurate score
       try {
         await supabase.from('notifications').insert({
           user_id: reviewData.attempt.candidate_id,
-          title: 'Assessment Score Released',
-          message: `Your score for "${reviewData.test_title}" has been reviewed and released: ${finalScore}% (${passOrFail.toUpperCase()}).`,
+          title: `Results Available: ${reviewData.test_title}`,
+          message: `Your score for ${reviewData.test_title} is ${finalScore}% (${passOrFail === 'pass' ? 'Passed' : 'Did Not Pass'}).${grantRetake ? ` You have been granted ${retakeCount} retake(s) for this test.` : ''}${cleanAdminNotes ? ` Admin notes: ${cleanAdminNotes}` : ''}`,
           type: 'result_released',
           link: isWorker ? '/worker' : '/candidate',
           created_at: new Date().toISOString(),
         });
-      } catch {}
-
-      // 6. Direct client update attempt
-      try {
-        await supabase
-          .from('attempts')
-          .update({
-            answers: updatedAnswers,
-            score: finalScore,
-            pass_or_fail: passOrFail,
-            correct_answers: Math.round(totalCorrectDisplay),
-            total_questions: totalQuestions,
-            review_status: 'released',
-            admin_notes: formattedNotes,
-            released_at: new Date().toISOString(),
-            released_by: currentAdminId,
-          })
-          .eq('id', reviewData.attempt.id);
       } catch {}
 
       const roleLabel = isWorker ? 'Worker' : 'Candidate';
@@ -557,46 +574,75 @@ export function ReviewAttemptModal({
             </div>
 
             {/* Score & Evaluation Bar */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4 flex-wrap">
-                <div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Calculated Grade</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{activeCalc.finalScore}%</span>
-                    <Badge color={activeCalc.passOrFail === 'pass' ? 'green' : 'red'}>
-                      {activeCalc.passOrFail === 'pass' ? 'PASS' : 'FAIL'}
-                    </Badge>
+            {(() => {
+              const textQuestions = reviewData.questions.filter((q) => q.question_type === 'text_short' || q.question_type === 'text_long');
+              const gradedTextCount = textQuestions.filter((q) => manualGrades[q.id] !== undefined).length;
+              const hasUngradedText = textQuestions.length > 0 && gradedTextCount < textQuestions.length;
+              const isPendingGrading = reviewData.attempt.review_status !== 'released' && hasUngradedText;
+
+              return (
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div>
+                      {isPendingGrading ? (
+                        <>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Evaluation Status</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                              {gradedTextCount > 0 ? `${activeCalc.finalScore}%` : '—'}
+                            </span>
+                            <Badge color="amber">
+                              <Clock size={12} className="inline mr-1" />
+                              PENDING GRADING ({gradedTextCount}/{textQuestions.length} scored)
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium mt-0.5">
+                            {textQuestions.length - gradedTextCount} manual question(s) awaiting examiner evaluation
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Calculated Grade</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{activeCalc.finalScore}%</span>
+                            <Badge color={activeCalc.passOrFail === 'pass' ? 'green' : 'red'}>
+                              {activeCalc.passOrFail === 'pass' ? 'PASS' : 'FAIL'}
+                            </Badge>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+
+                    <div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Score Breakdown</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                        {activeCalc.totalPointsEarned} pts ({activeCalc.autoCorrect} auto + {activeCalc.manualScoreSum} manual) / {activeCalc.totalQuestions} questions
+                      </p>
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+
+                    <div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Pass Mark</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{reviewData.pass_mark}%</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveManualGrades}
+                      disabled={savingGrades}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {savingGrades ? <Spinner size={14} /> : <Save size={14} />} Save Grades
+                    </Button>
                   </div>
                 </div>
-
-                <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
-
-                <div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Score Breakdown</span>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {activeCalc.totalPointsEarned} pts ({activeCalc.autoCorrect} auto + {activeCalc.manualScoreSum} manual) / {activeCalc.totalQuestions} questions
-                  </p>
-                </div>
-
-                <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
-
-                <div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Pass Mark</span>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{reviewData.pass_mark}%</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleSaveManualGrades}
-                  disabled={savingGrades}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {savingGrades ? <Spinner size={14} /> : <Save size={14} />} Save Grades
-                </Button>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Toasts */}
             {gradeSavedToast && (
@@ -667,7 +713,7 @@ export function ReviewAttemptModal({
                                   ? 'border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/20'
                                   : mg?.grade === 'incorrect'
                                   ? 'border-red-200 dark:border-red-900/60 bg-red-50/20 dark:bg-red-950/20'
-                                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                                  : 'border-amber-200/80 dark:border-amber-900/40 bg-amber-50/15 dark:bg-amber-950/10'
                                 : autoGradeEvaluated
                                 ? isCorrect
                                   ? 'border-green-200 dark:border-green-900/60 bg-green-50/20 dark:bg-green-950/20'
@@ -692,7 +738,9 @@ export function ReviewAttemptModal({
                                       {mg.grade === 'correct' ? 'Full Credit (1.0 pt)' : mg.grade === 'partial' ? `Partial (${mg.score} pt)` : 'No Credit (0 pt)'}
                                     </Badge>
                                   ) : (
-                                    <Badge color="amber">Awaiting Manual Grading</Badge>
+                                    <Badge color="amber">
+                                      <Clock size={11} className="inline mr-1" /> Awaiting Grade (— / 1 pt)
+                                    </Badge>
                                   )
                                 ) : (
                                   <Badge color={isCorrect ? 'green' : 'red'}>
@@ -907,9 +955,9 @@ export function ReviewAttemptModal({
                       <p className="text-xs sm:text-sm text-emerald-800 dark:text-emerald-200 mt-1">
                         This assessment has been reviewed and officially released to the {isWorker ? 'worker' : 'candidate'}.
                       </p>
-                      {reviewData.attempt.admin_notes && (
+                      {stripManualGradingTag(reviewData.attempt.admin_notes) && (
                         <div className="mt-2.5 p-3 rounded-xl bg-white/90 dark:bg-emerald-900/40 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-200">
-                          <strong>Examiner Notes:</strong> {reviewData.attempt.admin_notes}
+                          <strong>Examiner Notes:</strong> {stripManualGradingTag(reviewData.attempt.admin_notes)}
                         </div>
                       )}
                     </div>
