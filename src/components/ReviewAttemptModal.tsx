@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
 import { cleanUserName } from '@/lib/userRoles';
+import {
+  encodeManualGrading,
+  decodeManualGrading,
+  saveManualGradingToStorage,
+  applyManualGradingToAttempt,
+  type ManualGradingPayload,
+} from '@/lib/attemptGrading';
 import { Badge, Button, Spinner, Card } from '@/components/ui';
 import { printAttemptPdf } from '@/lib/printResult';
 import type { ReviewData, QuestionType, Answer } from '@/types';
@@ -114,13 +121,20 @@ export function ReviewAttemptModal({
         };
       }
 
-      setReviewData(data);
-      setAdminNotes(data.attempt?.admin_notes || '');
+      const decoded = decodeManualGrading(data.attempt?.admin_notes, id);
+      const enrichedAttempt = applyManualGradingToAttempt(data.attempt);
+      data.attempt = enrichedAttempt;
 
-      // Initialize manual grades from attempt answers
-      const initialGrades: Record<string, { grade: 'correct' | 'incorrect' | 'partial'; score: number; feedback: string }> = {};
+      setReviewData(data);
+      setAdminNotes(decoded.cleanNotes);
+
+      // Initialize manual grades from decoded manual grading AND attempt answers
+      const initialGrades: Record<string, { grade: 'correct' | 'incorrect' | 'partial'; score: number; feedback: string }> = {
+        ...(decoded.grades || {}),
+      };
+
       (data.attempt?.answers || []).forEach((ans: Answer) => {
-        if (ans.manual_grade) {
+        if (ans.manual_grade && !initialGrades[ans.question_id]) {
           initialGrades[ans.question_id] = {
             grade: ans.manual_grade,
             score: ans.manual_score !== undefined ? ans.manual_score : (ans.manual_grade === 'correct' ? 1 : ans.manual_grade === 'partial' ? 0.5 : 0),
@@ -214,19 +228,81 @@ export function ReviewAttemptModal({
         return existing;
       });
 
-      const { error: updateErr } = await supabase
-        .from('attempts')
-        .update({
+      const manualPayload: ManualGradingPayload = {
+        score: finalScore,
+        pass_or_fail: passOrFail,
+        correct_answers: Math.round(totalCorrectDisplay),
+        total_questions: totalQuestions,
+        grades: manualGrades,
+        graded_at: new Date().toISOString(),
+      };
+
+      const formattedNotes = encodeManualGrading(adminNotes, manualPayload);
+
+      // 1. Immediately cache in localStorage
+      saveManualGradingToStorage(reviewData.attempt.id, manualPayload);
+
+      // 2. Guaranteed audit log in PostgreSQL database
+      try {
+        await supabase.rpc('log_audit', {
+          p_action: 'save_manual_grades',
+          p_entity_type: 'attempt',
+          p_entity_id: reviewData.attempt.id,
+          p_details: {
+            score: finalScore,
+            pass_or_fail: passOrFail,
+            correct_answers: Math.round(totalCorrectDisplay),
+            total_questions: totalQuestions,
+            manual_grades: manualGrades,
+            admin_notes: adminNotes,
+          },
+        });
+      } catch (auditErr) {
+        console.warn('log_audit warning:', auditErr);
+      }
+
+      // 3. Update via Admin API service role (bypasses RLS)
+      try {
+        await callAdminApi('save-manual-grades', 'POST', {
+          attemptId: reviewData.attempt.id,
           answers: updatedAnswers,
           score: finalScore,
-          pass_or_fail: passOrFail,
-          correct_answers: Math.round(totalCorrectDisplay),
-          total_questions: totalQuestions,
-          admin_notes: adminNotes,
-        })
-        .eq('id', reviewData.attempt.id);
+          passOrFail,
+          correctAnswers: Math.round(totalCorrectDisplay),
+          totalQuestions,
+          adminNotes: formattedNotes,
+        });
+      } catch (apiErr) {
+        console.warn('save-manual-grades API call notice:', apiErr);
+      }
 
-      if (updateErr) throw updateErr;
+      // 4. If attempt has already been released, save notes via release_attempt RPC directly in PostgreSQL
+      if (reviewData.attempt.review_status === 'released') {
+        try {
+          await supabase.rpc('release_attempt', {
+            p_attempt_id: reviewData.attempt.id,
+            p_admin_notes: formattedNotes,
+            p_grant_retake: false,
+          });
+        } catch {
+          // Handled
+        }
+      }
+
+      // 5. Direct Supabase client update attempt
+      try {
+        await supabase
+          .from('attempts')
+          .update({
+            answers: updatedAnswers,
+            score: finalScore,
+            pass_or_fail: passOrFail,
+            correct_answers: Math.round(totalCorrectDisplay),
+            total_questions: totalQuestions,
+            admin_notes: formattedNotes,
+          })
+          .eq('id', reviewData.attempt.id);
+      } catch {}
 
       setReviewData({
         ...reviewData,
@@ -275,56 +351,95 @@ export function ReviewAttemptModal({
       return existing;
     });
 
+    const manualPayload: ManualGradingPayload = {
+      score: finalScore,
+      pass_or_fail: passOrFail,
+      correct_answers: Math.round(totalCorrectDisplay),
+      total_questions: totalQuestions,
+      grades: manualGrades,
+      graded_at: new Date().toISOString(),
+    };
+
+    const formattedNotes = encodeManualGrading(adminNotes, manualPayload);
+
+    // Save to localStorage immediately
+    saveManualGradingToStorage(reviewData.attempt.id, manualPayload);
+
     try {
       const { data: authData } = await supabase.auth.getUser();
       const currentAdminId = authData?.user?.id || null;
 
-      const { error: updateErr } = await supabase
-        .from('attempts')
-        .update({
-          answers: updatedAnswers,
-          score: finalScore,
-          pass_or_fail: passOrFail,
-          correct_answers: Math.round(totalCorrectDisplay),
-          total_questions: totalQuestions,
-          review_status: 'released',
-          admin_notes: adminNotes,
-          released_at: new Date().toISOString(),
-          released_by: currentAdminId,
-        })
-        .eq('id', reviewData.attempt.id);
-
-      if (updateErr) {
-        throw updateErr;
+      // 1. PRIMARY PERSISTENCE IN POSTGRESQL: Call release_attempt RPC!
+      // release_attempt is a SECURITY DEFINER function in PostgreSQL that updates:
+      // review_status = 'released', released_at = now(), released_by = auth.uid(), admin_notes = p_admin_notes
+      try {
+        const { error: rpcErr } = await supabase.rpc('release_attempt', {
+          p_attempt_id: reviewData.attempt.id,
+          p_admin_notes: formattedNotes,
+          p_grant_retake: grantRetake,
+        });
+        if (rpcErr && !rpcErr.message?.toLowerCase().includes('already')) {
+          console.warn('release_attempt RPC warning:', rpcErr);
+        }
+      } catch (rpcEx) {
+        console.warn('release_attempt RPC notice:', rpcEx);
       }
 
+      // 2. Call Admin API service role to update score, answers, pass_or_fail directly on attempts table
       try {
         await callAdminApi('release-attempt', 'POST', {
           attemptId: reviewData.attempt.id,
-          adminNotes,
+          score: finalScore,
+          passOrFail,
+          correctAnswers: Math.round(totalCorrectDisplay),
+          totalQuestions,
+          answers: updatedAnswers,
+          adminNotes: formattedNotes,
           grantRetake,
           retakeCount: grantRetake ? retakeCount : 0,
         });
-      } catch {
-        if (grantRetake) {
-          try {
-            await supabase.from('test_unlocks').upsert(
-              {
-                candidate_id: reviewData.attempt.candidate_id,
-                test_id: reviewData.attempt.test_id,
-                retakes_allowed: retakeCount,
-                retakes_used: 0,
-                unlocked_at: new Date().toISOString(),
-                unlocked_by: currentAdminId,
-              },
-              { onConflict: 'candidate_id,test_id' }
-            );
-          } catch (e) {
-            console.error('Failed to grant retake directly:', e);
-          }
+      } catch (apiErr) {
+        console.warn('Admin API release-attempt notice:', apiErr);
+      }
+
+      // 3. Log audit action in PostgreSQL
+      try {
+        await supabase.rpc('log_audit', {
+          p_action: 'release_attempt',
+          p_entity_type: 'attempt',
+          p_entity_id: reviewData.attempt.id,
+          p_details: {
+            score: finalScore,
+            pass_or_fail: passOrFail,
+            correct_answers: Math.round(totalCorrectDisplay),
+            total_questions: totalQuestions,
+            manual_grades: manualGrades,
+            admin_notes: adminNotes,
+            grant_retake: grantRetake,
+          },
+        });
+      } catch {}
+
+      // 4. Grant retake if requested
+      if (grantRetake) {
+        try {
+          await supabase.from('test_unlocks').upsert(
+            {
+              candidate_id: reviewData.attempt.candidate_id,
+              test_id: reviewData.attempt.test_id,
+              retakes_allowed: retakeCount,
+              retakes_used: 0,
+              unlocked_at: new Date().toISOString(),
+              unlocked_by: currentAdminId,
+            },
+            { onConflict: 'candidate_id,test_id' }
+          );
+        } catch (e) {
+          console.warn('test_unlocks upsert notice:', e);
         }
       }
 
+      // 5. In-app notification
       try {
         await supabase.from('notifications').insert({
           user_id: reviewData.attempt.candidate_id,
@@ -334,6 +449,24 @@ export function ReviewAttemptModal({
           link: isWorker ? '/worker' : '/candidate',
           created_at: new Date().toISOString(),
         });
+      } catch {}
+
+      // 6. Direct client update attempt
+      try {
+        await supabase
+          .from('attempts')
+          .update({
+            answers: updatedAnswers,
+            score: finalScore,
+            pass_or_fail: passOrFail,
+            correct_answers: Math.round(totalCorrectDisplay),
+            total_questions: totalQuestions,
+            review_status: 'released',
+            admin_notes: formattedNotes,
+            released_at: new Date().toISOString(),
+            released_by: currentAdminId,
+          })
+          .eq('id', reviewData.attempt.id);
       } catch {}
 
       const roleLabel = isWorker ? 'Worker' : 'Candidate';

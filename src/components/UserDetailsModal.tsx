@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/lib/auth';
 import { supabase, callAdminApi } from '@/lib/supabase';
 import { cleanUserName, formatRoleName, isWorkerProfile, setUserRole } from '@/lib/userRoles';
+import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
 import {
   fetchUserTestAccess,
   setUserTestAccessOverride,
@@ -15,7 +17,7 @@ import { printAttemptPdf } from '@/lib/printResult';
 import type { Profile, Test, AttemptWithDetails, UserTestAccess } from '@/types';
 import {
   FileText, Award, CheckCircle2, XCircle, Clock, ShieldAlert,
-  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check, GraduationCap, Printer, Archive
+  Unlock, Lock, RotateCcw, Eye, Users, Briefcase, Calendar, Mail, Check, GraduationCap, Printer, Archive, ShieldCheck
 } from 'lucide-react';
 
 interface UserDetailsModalProps {
@@ -25,10 +27,14 @@ interface UserDetailsModalProps {
 }
 
 export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsModalProps) {
+  const { profile: currentAdminProfile } = useAuth();
+  const isSuperAdmin = currentAdminProfile?.role === 'super_admin';
+
   const [activeTab, setActiveTab] = useState<'tests' | 'access'>('tests');
   const [loading, setLoading] = useState(true);
   const [currentRole, setCurrentRole] = useState(isWorkerProfile(user) ? 'worker' : 'candidate');
   const [switchingRole, setSwitchingRole] = useState(false);
+  const [promotingAdmin, setPromotingAdmin] = useState(false);
   const [attempts, setAttempts] = useState<AttemptWithDetails[]>([]);
   const [allTests, setAllTests] = useState<Test[]>([]);
   const [testAccessMap, setTestAccessMap] = useState<Record<string, UserTestAccess>>({});
@@ -62,12 +68,15 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
       ]);
 
       const testTitleMap = new Map((testsData || []).map((t) => [t.id, t.title]));
-      const enrichedAttempts: AttemptWithDetails[] = (attemptsData || []).map((a) => ({
-        ...a,
-        test_title: testTitleMap.get(a.test_id) || 'Unknown Test',
-        candidate_name: cleanUserName(user.name) || 'User',
-        candidate_email: user.email,
-      }));
+      const enrichedAttempts: AttemptWithDetails[] = (attemptsData || []).map((a) => {
+        const enriched = {
+          ...a,
+          test_title: testTitleMap.get(a.test_id) || 'Unknown Test',
+          candidate_name: cleanUserName(user.name) || 'User',
+          candidate_email: user.email,
+        };
+        return applyManualGradingToAttempt(enriched) as AttemptWithDetails;
+      });
 
       // Merge direct access tags from all tests into accessLookup
       const uid = (user.id || '').trim().toLowerCase();
@@ -278,6 +287,44 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
     }
   };
 
+  const handlePromoteToAdmin = async () => {
+    if (!isSuperAdmin) return;
+    const confirmPromote = window.confirm(
+      `Promote "${cleanUserName(user.name)}" to Administrator?\n\nThey will be granted admin dashboard access and managed under Admin Management.`
+    );
+    if (!confirmPromote) return;
+
+    setPromotingAdmin(true);
+    try {
+      const defaultAdminPerms = ['can-manage-tests', 'can-manage-users', 'can-view-reports'];
+      // 1. Elevate role via super_admin RPC
+      await supabase.rpc('update_admin_role', {
+        p_admin_id: user.id,
+        p_role: 'admin',
+      });
+
+      // 2. Grant admin permissions
+      await supabase.rpc('update_admin_permissions', {
+        p_admin_id: user.id,
+        p_permissions: defaultAdminPerms,
+      });
+
+      user.role = 'admin';
+      user.permissions = defaultAdminPerms;
+      setUserRole(user.id, user.name, 'admin');
+
+      showToast(`User successfully promoted to Administrator.`);
+      onUserUpdated?.();
+      setTimeout(() => {
+        onClose();
+      }, 700);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to promote user to administrator');
+    } finally {
+      setPromotingAdmin(false);
+    }
+  };
+
   return (
     <Modal open={true} onClose={onClose} title="User Details & Test Management" maxWidth="max-w-4xl">
       <div className="space-y-6">
@@ -320,6 +367,24 @@ export function UserDetailsModal({ user, onClose, onUserUpdated }: UserDetailsMo
                       </>
                     )}
                   </Button>
+                  {isSuperAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={promotingAdmin}
+                      onClick={handlePromoteToAdmin}
+                      title="Promote this user to Administrator"
+                      className="text-xs h-7 px-2.5 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-amber-200 dark:border-amber-800"
+                    >
+                      {promotingAdmin ? (
+                        <Spinner size={12} />
+                      ) : (
+                        <>
+                          <ShieldCheck size={13} className="text-amber-600 dark:text-amber-400" /> Make Admin
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <Badge color={user.status === 'active' ? 'green' : user.status === 'pending' ? 'amber' : 'red'}>
                     {user.status}
                   </Badge>

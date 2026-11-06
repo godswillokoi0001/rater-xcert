@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, callAdminApi } from '@/lib/supabase';
 import { cleanUserName } from '@/lib/userRoles';
+import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Card, Badge, Spinner, EmptyState, Button, Select } from '@/components/ui';
 import { ReviewAttemptModal } from '@/components/ReviewAttemptModal';
@@ -55,13 +56,14 @@ export function AdminResultsPage() {
 
     const enriched: AttemptWithDetails[] = (attemptsData || []).map((a) => {
       const cand = candidateMap.get(a.candidate_id);
-      return {
+      const withCand = {
         ...a,
         test_title: testMap.get(a.test_id) || 'Unknown Assessment',
         candidate_name: cand?.name || 'Candidate',
         candidate_email: cand?.email || '',
       };
-    }) as AttemptWithDetails[];
+      return applyManualGradingToAttempt(withCand) as AttemptWithDetails;
+    });
 
     setAttempts(enriched);
     setTests((testsData || []) as Test[]);

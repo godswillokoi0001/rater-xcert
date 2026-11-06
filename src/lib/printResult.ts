@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
 import type { ReviewData, QuestionType, Answer } from '@/types';
 
 function escapeHtml(text: string): string {
@@ -78,6 +79,8 @@ export async function printAttemptPdf(attemptId: string, initialReviewData?: Rev
     alert('Assessment data unavailable for printing.');
     return;
   }
+
+  fullData.attempt = applyManualGradingToAttempt(fullData.attempt);
 
   const printWin = window.open('', '_blank', 'width=900,height=1000');
   if (!printWin) {

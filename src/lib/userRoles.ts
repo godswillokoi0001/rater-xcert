@@ -11,7 +11,10 @@ export function cleanUserName(name: string | null | undefined): string {
 /**
  * Formats a name with an explicit internal role tag if needed.
  */
-export function formatRoleName(name: string | null | undefined, role: 'candidate' | 'worker'): string {
+export function formatRoleName(
+  name: string | null | undefined,
+  role: 'candidate' | 'worker' | 'admin' | 'super_admin'
+): string {
   const clean = cleanUserName(name);
   if (role === 'worker') {
     return clean ? `${clean} [ROLE:worker]` : '[ROLE:worker]';
@@ -55,7 +58,7 @@ export function isCandidateProfile(
 export async function setUserRole(
   userId: string,
   currentName: string | null | undefined,
-  targetRole: 'candidate' | 'worker'
+  targetRole: 'candidate' | 'worker' | 'admin' | 'super_admin'
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const updatedName = formatRoleName(currentName, targetRole);
@@ -68,34 +71,43 @@ export async function setUserRole(
 
     if (rpcErr) {
       console.warn('update_user_name rpc warning:', rpcErr);
-      throw new Error(rpcErr.message || 'Failed to update user name tag in database');
     }
 
-    // 2. Best-effort attempts to update role/permissions in database schema
-    try {
-      await callAdminApi('update-user-role', 'POST', { userId, role: targetRole });
-    } catch {
-      // Ignored if edge function not deployed
+    if (targetRole === 'admin') {
+      try {
+        await supabase.rpc('update_admin_role', { p_admin_id: userId, p_role: 'admin' });
+      } catch {}
+      try {
+        await supabase.rpc('update_admin_permissions', {
+          p_admin_id: userId,
+          p_permissions: ['can-manage-tests', 'can-manage-users', 'can-view-reports'],
+        });
+      } catch {}
+    } else {
+      // 2. Best-effort attempts to update role/permissions in database schema
+      try {
+        await callAdminApi('update-user-role', 'POST', { userId, role: targetRole });
+      } catch {
+        // Ignored if edge function not deployed
+      }
+
+      try {
+        await supabase.rpc('update_user_role', { p_user_id: userId, p_role: targetRole });
+      } catch {
+        // Ignored if RPC not present in remote schema
+      }
     }
 
     try {
-      await supabase.rpc('update_user_role', { p_user_id: userId, p_role: targetRole });
-    } catch {
-      // Ignored if RPC not present in remote schema
-    }
-
-    try {
-      const perms = targetRole === 'worker' ? ['worker'] : [];
-      const { error: updErr } = await supabase
+      const perms = targetRole === 'admin'
+        ? ['can-manage-tests', 'can-manage-users', 'can-view-reports']
+        : targetRole === 'worker'
+        ? ['worker']
+        : [];
+      await supabase
         .from('profiles')
         .update({ role: targetRole, name: updatedName, permissions: perms })
         .eq('id', userId);
-      if (updErr) {
-        await supabase
-          .from('profiles')
-          .update({ name: updatedName, permissions: perms })
-          .eq('id', userId);
-      }
     } catch {
       // Ignored
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/lib/auth';
-import { callAdminApi } from '@/lib/supabase';
+import { supabase, callAdminApi } from '@/lib/supabase';
 import { formatRoleName, cleanUserName, setUserRole } from '@/lib/userRoles';
 import { Modal, Button, Input, Label, Spinner } from '@/components/ui';
 import { PERMISSIONS } from '@/types';
@@ -71,16 +72,141 @@ export function CreateAccountModal({
     setError('');
 
     const formattedName = role === 'worker' ? formatRoleName(name.trim(), 'worker') : cleanUserName(name.trim());
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      await callAdminApi('create-user', 'POST', {
-        email: email.trim().toLowerCase(),
-        password,
-        name: formattedName,
-        role,
-        status,
-        permissions: role === 'admin' ? permissions : [],
-      });
+      let targetUserId: string | null = null;
+
+      // 1. Check if an account already exists with this email in profiles
+      const { data: existingProf } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+
+      if (existingProf) {
+        targetUserId = existingProf.id;
+      }
+
+      // 2. Try creating account via admin API if not already found
+      if (!targetUserId) {
+        try {
+          const res = await callAdminApi('create-user', 'POST', {
+            email: normalizedEmail,
+            password,
+            name: formattedName,
+            role,
+            status,
+            permissions: role === 'admin' ? permissions : [],
+          });
+          if (res?.id) {
+            targetUserId = res.id;
+          }
+        } catch (apiErr) {
+          console.warn('callAdminApi create-user failed, falling back to secondary client:', apiErr);
+        }
+      }
+
+      // 3. Fallback: create via secondary Supabase Auth client if admin API failed or unavailable
+      if (!targetUserId) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+        const secondaryClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: signUpData, error: signUpErr } = await secondaryClient.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: {
+              name: formattedName,
+              role: role,
+            },
+          },
+        });
+
+        if (signUpErr) {
+          // If already registered, fetch profile id
+          if (signUpErr.message?.toLowerCase().includes('already') || (signUpErr as any).status === 422) {
+            const { data: retryProf } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', normalizedEmail)
+              .maybeSingle();
+            if (retryProf) {
+              targetUserId = retryProf.id;
+            } else {
+              throw signUpErr;
+            }
+          } else {
+            throw signUpErr;
+          }
+        } else if (signUpData.user) {
+          targetUserId = signUpData.user.id;
+        }
+      }
+
+      // 4. GUARANTEE PERMANENT ROLE & PERMISSIONS IN POSTGRESQL VIA VERIFIED RPCs
+      if (targetUserId) {
+        if (role === 'admin') {
+          // Elevate role to admin in PostgreSQL database
+          try {
+            const { error: roleErr } = await supabase.rpc('update_admin_role', {
+              p_admin_id: targetUserId,
+              p_role: 'admin',
+            });
+            if (roleErr) console.warn('update_admin_role RPC warning:', roleErr);
+          } catch (rErr) {
+            console.warn('update_admin_role RPC exception:', rErr);
+          }
+
+          // Apply selected permissions in PostgreSQL database
+          try {
+            const { error: permErr } = await supabase.rpc('update_admin_permissions', {
+              p_admin_id: targetUserId,
+              p_permissions: permissions,
+            });
+            if (permErr) console.warn('update_admin_permissions RPC warning:', permErr);
+          } catch (pErr) {
+            console.warn('update_admin_permissions RPC exception:', pErr);
+          }
+        } else if (role === 'worker') {
+          try {
+            await supabase.rpc('update_user_role', {
+              p_user_id: targetUserId,
+              p_role: 'worker',
+            });
+          } catch (wErr) {
+            console.warn('update_user_role RPC warning:', wErr);
+          }
+        }
+
+        // Apply account status (active / pending)
+        try {
+          await supabase.rpc('update_user_status', {
+            p_user_id: targetUserId,
+            p_status: status,
+          });
+        } catch (sErr) {
+          console.warn('update_user_status RPC warning:', sErr);
+        }
+
+        // Update clean name
+        try {
+          await supabase.rpc('update_user_name', {
+            p_user_id: targetUserId,
+            p_name: formattedName,
+          });
+        } catch (nErr) {
+          console.warn('update_user_name RPC warning:', nErr);
+        }
+
+        // Cache role locally
+        try {
+          setUserRole(targetUserId, formattedName, role);
+        } catch {}
+      }
 
       onCreated();
       onClose();

@@ -14,7 +14,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
-    const path = url.pathname.replace(/^\/?admin-api\/?/, "").replace(/^\/+/, "").replace(/\/+$/, "");
+    const path = url.pathname.replace(/^.*\/admin-api\/?/, "").replace(/^\/+/, "").replace(/\/+$/, "");
     const method = req.method;
 
     // Route: POST /bootstrap — one-time super-admin setup (no auth required)
@@ -623,7 +623,7 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({
         attempt: { ...attempt, review_status: attempt.review_status === "pending_review" ? "reviewed" : attempt.review_status },
         test_title: test?.title || "Unknown",
-        pass_mark: test?.pass_mark || 70,
+        pass_mark: test?.pass_mark ?? 70,
         candidate_name: candidateProfile?.name || "Unknown",
         candidate_email: candidateUser?.user?.email || "",
         sections: sections || [],
@@ -631,6 +631,61 @@ Deno.serve(async (req: Request) => {
         options,
         links,
       }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Route: POST /save-manual-grades — super_admin/admin saves manual grades to attempt
+    if (path === "save-manual-grades" && method === "POST") {
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { attemptId, answers, score, passOrFail, correctAnswers, totalQuestions, adminNotes } = await req.json();
+      if (!attemptId) {
+        return new Response(JSON.stringify({ error: "Attempt ID required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+
+      const updatePayload: Record<string, unknown> = {};
+      if (answers !== undefined) updatePayload.answers = answers;
+      if (score !== undefined) updatePayload.score = score;
+      if (passOrFail !== undefined) updatePayload.pass_or_fail = passOrFail;
+      if (correctAnswers !== undefined) updatePayload.correct_answers = correctAnswers;
+      if (totalQuestions !== undefined) updatePayload.total_questions = totalQuestions;
+      if (adminNotes !== undefined) updatePayload.admin_notes = adminNotes;
+
+      const { data: updatedAttempt, error: updateErr } = await adminClient
+        .from("attempts")
+        .update(updatePayload)
+        .eq("id", attemptId)
+        .select()
+        .maybeSingle();
+
+      if (updateErr) {
+        return new Response(JSON.stringify({ error: updateErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await logAudit("save_manual_grades", "attempt", attemptId, {
+        score,
+        pass_or_fail: passOrFail,
+        correct_answers: correctAnswers,
+        total_questions: totalQuestions,
+      });
+
+      return new Response(JSON.stringify({ success: true, attempt: updatedAttempt }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -643,7 +698,7 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { attemptId, adminNotes, grantRetake, retakeCount } = await req.json();
+      const { attemptId, adminNotes, grantRetake, retakeCount, score, passOrFail, correctAnswers, totalQuestions, answers } = await req.json();
       if (!attemptId) {
         return new Response(JSON.stringify({ error: "Attempt ID required" }), {
           status: 400,
@@ -687,15 +742,22 @@ Deno.serve(async (req: Request) => {
       const candidateName = candidateProfile?.name || "Candidate";
       const testTitle = test?.title || "Certification Exam";
 
-      // Release the score
+      // Release the score and update manual grades/answers
+      const updateData: Record<string, unknown> = {
+        review_status: "released",
+        released_at: new Date().toISOString(),
+        released_by: callerId,
+        admin_notes: adminNotes || "",
+      };
+      if (score !== undefined) updateData.score = score;
+      if (passOrFail !== undefined) updateData.pass_or_fail = passOrFail;
+      if (correctAnswers !== undefined) updateData.correct_answers = correctAnswers;
+      if (totalQuestions !== undefined) updateData.total_questions = totalQuestions;
+      if (answers !== undefined) updateData.answers = answers;
+
       const { error: releaseErr } = await adminClient
         .from("attempts")
-        .update({
-          review_status: "released",
-          released_at: new Date().toISOString(),
-          released_by: callerId,
-          admin_notes: adminNotes || "",
-        })
+        .update(updateData)
         .eq("id", attemptId);
 
       if (releaseErr) {

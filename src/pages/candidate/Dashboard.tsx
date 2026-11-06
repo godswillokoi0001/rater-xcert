@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
+import { applyManualGradingToAttempt } from '@/lib/attemptGrading';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { CandidateLayout } from '@/components/layouts';
@@ -48,10 +49,13 @@ export function CandidateDashboard() {
       const testIds = [...new Set(attemptsData.map((a) => a.test_id))];
       const { data: testInfo } = await supabase.from('tests').select('id, title').in('id', testIds);
       const titleMap = new Map((testInfo || []).map((t) => [t.id, t.title]));
-      attemptsWithTitles = (attemptsData || []).map((a) => ({
-        ...a,
-        test_title: titleMap.get(a.test_id) || 'Unknown Test',
-      })) as AttemptWithDetails[];
+      attemptsWithTitles = (attemptsData || []).map((a) => {
+        const withTitle = {
+          ...a,
+          test_title: titleMap.get(a.test_id) || 'Unknown Test',
+        };
+        return applyManualGradingToAttempt(withTitle) as AttemptWithDetails;
+      });
     }
 
     let testsWithCounts: TestWithCounts[] = [];

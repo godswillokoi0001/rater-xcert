@@ -27,6 +27,7 @@ export async function callAdminApi(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      apikey: supabaseAnonKey,
     },
     body: body ? JSON.stringify(body) : undefined,
   });

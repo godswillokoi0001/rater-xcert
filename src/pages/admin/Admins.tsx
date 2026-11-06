@@ -17,6 +17,17 @@ export function AdminAdminsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
 
   const fetchAdmins = useCallback(async () => {
+    try {
+      const res = await callAdminApi('list-users', 'GET');
+      if (res?.profiles) {
+        const adminProfs = res.profiles.filter((p: any) => p.role === 'admin' || p.role === 'super_admin');
+        setProfiles(adminProfs as Profile[]);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Fallback to direct query
+    }
     const { data } = await supabase.from('profiles').select('*').in('role', ['admin', 'super_admin']).order('created_at', { ascending: false });
     setProfiles((data || []) as Profile[]);
     setLoading(false);
