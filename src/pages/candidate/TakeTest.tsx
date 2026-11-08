@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
+import { evaluateRetakeEligibility } from '@/lib/testPolicy';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { Button, Card, Badge, Spinner } from '@/components/ui';
@@ -96,14 +97,42 @@ export function TestTakingPage({ testId }: { testId: string }) {
         return;
       }
 
-      try {
-        const { data: canTake, error: canTakeErr } = await supabase.rpc('can_take_test', { p_test_id: testId });
-        if (!canTakeErr && canTake && !canTake.can_take) {
-          setBlockedReason(canTake.reason || 'You are not allowed to take this test at this time.');
-          setLoading(false);
-          return;
-        }
-      } catch {}
+      // Policy gate shared with the dashboards. The database re-checks the same
+      // policy inside submit_attempt, so this only protects the runner screen.
+      const [{ data: priorAttempts }, { data: unlockRows }] = await Promise.all([
+        supabase
+          .from('attempts')
+          .select('id, review_status, pass_or_fail, submitted_at')
+          .eq('candidate_id', user.id)
+          .eq('test_id', testId),
+        supabase
+          .from('test_unlocks')
+          .select('retakes_allowed, retakes_used')
+          .eq('candidate_id', user.id)
+          .eq('test_id', testId),
+      ]);
+
+      const manualRetakesRemaining = Math.max(
+        0,
+        ...((unlockRows || []) as { retakes_allowed: number; retakes_used: number }[]).map(
+          (unlock) => Number(unlock.retakes_allowed || 0) - Number(unlock.retakes_used || 0)
+        )
+      );
+
+      const eligibility = evaluateRetakeEligibility(test as Test, priorAttempts || [], manualRetakesRemaining);
+      if (!eligibility.canTake) {
+        const reason =
+          eligibility.blockReason === 'unreleased'
+            ? 'Your previous attempt is awaiting admin review.'
+            : eligibility.blockReason === 'passed'
+              ? 'You have already passed this test.'
+              : eligibility.blockReason === 'exhausted'
+                ? 'You have reached the maximum number of retakes for this test.'
+                : 'You are not allowed to take this test at this time.';
+        setBlockedReason(reason);
+        setLoading(false);
+        return;
+      }
 
       const { data: sections } = await supabase
         .from('sections').select('*').eq('test_id', testId).order('order_index', { ascending: true });
@@ -219,13 +248,26 @@ export function TestTakingPage({ testId }: { testId: string }) {
         p_test_id: testId, p_answers: allAnswers, p_per_section_time_used: finalTimeUsed,
       });
       if (error) throw error;
+
+      // Some deployments return only the review status from submit_attempt, so
+      // read the graded attempt back to always show the released score.
+      let graded = resultData || {};
+      if (graded.score === undefined && graded.attempt_id) {
+        const { data: attemptRow } = await supabase
+          .from('attempts')
+          .select('score, pass_or_fail, correct_answers, total_questions')
+          .eq('id', graded.attempt_id)
+          .maybeSingle();
+        if (attemptRow) graded = { ...graded, ...attemptRow };
+      }
+
       setResult({
-        review_status: resultData.review_status || 'pending_review',
-        review_mode: resultData.review_mode,
-        score: resultData.score,
-        pass_or_fail: resultData.pass_or_fail,
-        correct_answers: resultData.correct_answers,
-        total_questions: resultData.total_questions,
+        review_status: graded.review_status || 'pending_review',
+        review_mode: graded.review_mode,
+        score: graded.score,
+        pass_or_fail: graded.pass_or_fail,
+        correct_answers: graded.correct_answers,
+        total_questions: graded.total_questions,
       });
 
       // Trigger notification email to super admin

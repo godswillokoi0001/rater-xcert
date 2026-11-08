@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
+import { getTestRetakePolicy, writeRetakePolicyTags } from '@/lib/testPolicy';
+import { createTestRecord, updateTestRecord } from '@/lib/testRpc';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Textarea, Label, Modal, Spinner, EmptyState, ConfirmDialog, Select } from '@/components/ui';
 import type { Test, Section, Question, Option, QuestionLink, TestStatus, ReviewMode, QuestionType, ScoringMode } from '@/types';
@@ -35,6 +37,17 @@ const QUESTION_TYPE_META: Record<QuestionType, { label: string; icon: React.Reac
   dropdown: { label: 'Dropdown', icon: <ChevronDownSquare size={14} />, color: 'text-indigo-600 bg-indigo-50' },
   true_false: { label: 'True / False', icon: <ToggleLeft size={14} />, color: 'text-emerald-600 bg-emerald-50' },
 };
+
+function RetakePolicyLabel({ test }: { test: Test }) {
+  const { retakesAllowed, retakeOnFailOnly } = getTestRetakePolicy(test);
+  const label =
+    retakesAllowed === -1
+      ? 'Unlimited Retakes'
+      : retakesAllowed > 0
+        ? `${retakesAllowed} Retake${retakesAllowed > 1 ? 's' : ''}${retakeOnFailOnly ? ' (on failure)' : ''}`
+        : 'No Retakes';
+  return <>{label}</>;
+}
 
 export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'candidate' | 'worker' }) {
   const isWorkerTab = roleFilter === 'worker';
@@ -85,54 +98,23 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
   };
 
   const handleStatusChange = async (test: Test, status: TestStatus) => {
-    const safeTitle = test.title || 'Untitled Test';
-    const safeDesc = test.description || '';
-    const safePassMark = Number(test.pass_mark) || 70;
-    const safeReviewMode = test.review_mode || 'super_admin_approval';
-    const safeRetakes = test.retakes_allowed ?? 0;
-    const safeRetakeFailOnly = test.retake_on_fail_only ?? true;
-    const safeTargetRole = test.target_role || (isWorkerTab ? 'worker' : 'candidate');
-
-    let res = await supabase.rpc('update_test', {
-      p_test_id: test.id,
-      p_title: safeTitle,
-      p_description: safeDesc,
-      p_pass_mark: safePassMark,
-      p_status: status,
-      p_review_mode: safeReviewMode,
-      p_retakes_allowed: safeRetakes,
-      p_retake_on_fail_only: safeRetakeFailOnly,
-      p_target_role: safeTargetRole,
+    const policy = getTestRetakePolicy(test);
+    // Publishing/archiving sends the whole record back, so the policy has to be
+    // carried through or the status change would reset the retake settings.
+    const result = await updateTestRecord({
+      id: test.id,
+      title: test.title || 'Untitled Test',
+      description: writeRetakePolicyTags(test.description || '', policy),
+      passMark: Number(test.pass_mark) || 70,
+      status,
+      reviewMode: test.review_mode || 'super_admin_approval',
+      retakesAllowed: policy.retakesAllowed,
+      retakeOnFailOnly: policy.retakeOnFailOnly,
+      targetRole: test.target_role || (isWorkerTab ? 'worker' : 'candidate'),
     });
 
-    if (res.error) {
-      res = await supabase.rpc('update_test', {
-        p_test_id: test.id,
-        p_title: safeTitle,
-        p_description: safeDesc,
-        p_pass_mark: safePassMark,
-        p_status: status,
-        p_review_mode: safeReviewMode,
-        p_retakes_allowed: safeRetakes,
-        p_retake_on_fail_only: safeRetakeFailOnly,
-      });
-    }
-
-    if (res.error) {
-      res = await supabase.rpc('update_test', {
-        p_test_id: test.id,
-        p_title: safeTitle,
-        p_description: safeDesc,
-        p_pass_mark: safePassMark,
-        p_status: status,
-        p_review_mode: safeReviewMode,
-      });
-    }
-
-    // NEVER call 5-param update_test to avoid PostgreSQL ambiguous overload errors
-
-    if (res.error) {
-      alert(res.error.message || 'Failed to update test status');
+    if (result.error) {
+      alert(result.error);
     }
 
     fetchTests();
@@ -223,11 +205,7 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
                           </span>
                           <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             <RotateCcw size={10} />
-                            {test.retakes_allowed === -1
-                              ? 'Unlimited Retakes'
-                              : test.retakes_allowed && test.retakes_allowed > 0
-                              ? `${test.retakes_allowed} Retake${test.retakes_allowed > 1 ? 's' : ''}`
-                              : 'No Retakes'}
+                            <RetakePolicyLabel test={test} />
                           </span>
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
                             test.target_role === 'worker' || test.description?.includes('[ROLE:worker]')
@@ -316,8 +294,9 @@ function TestEditorModal({
   const [passMark, setPassMark] = useState(test?.pass_mark ?? 70);
   const [status, setStatus] = useState<TestStatus>(test?.status || 'draft');
   const [reviewMode, setReviewMode] = useState<ReviewMode>(test?.review_mode || 'super_admin_approval');
-  const [retakesAllowed, setRetakesAllowed] = useState<number>(test?.retakes_allowed ?? 0);
-  const [retakeOnFailOnly, setRetakeOnFailOnly] = useState<boolean>(test?.retake_on_fail_only ?? true);
+  const initialRetakePolicy = getTestRetakePolicy(test);
+  const [retakesAllowed, setRetakesAllowed] = useState<number>(initialRetakePolicy.retakesAllowed);
+  const [retakeOnFailOnly, setRetakeOnFailOnly] = useState<boolean>(initialRetakePolicy.retakeOnFailOnly);
   const [saving, setSaving] = useState(false);
 
   // Target role is strictly locked to worker in Workers Tests and candidate in Candidate Tests
@@ -337,6 +316,12 @@ function TestEditorModal({
     } else {
       taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:candidate]` : '[ROLE:candidate]';
     }
+    // Mirror the retake policy into the description tags (works on databases
+    // that do not have the retake columns yet) before the access tags.
+    taggedDesc = writeRetakePolicyTags(taggedDesc, {
+      retakesAllowed: retakesAllowed ?? 0,
+      retakeOnFailOnly: retakeOnFailOnly ?? true,
+    });
     if (blockedUsers.size > 0) {
       taggedDesc = `${taggedDesc} [BLOCKED_USERS:${Array.from(blockedUsers).join(',')}]`;
     }
@@ -345,107 +330,22 @@ function TestEditorModal({
     }
 
     try {
-      if (test) {
-        const safeTitle = title.trim();
-        const safeDesc = taggedDesc || '';
-        const safePassMark = Number(passMark) || 70;
-        const safeReviewMode = reviewMode || 'super_admin_approval';
-        const safeRetakes = retakesAllowed ?? 0;
-        const safeRetakeFailOnly = retakeOnFailOnly ?? true;
-        const safeTargetRole = targetRole || (isWorkerTarget ? 'worker' : 'candidate');
+      const payload = {
+        title: title.trim(),
+        description: taggedDesc,
+        passMark: Number(passMark) || 70,
+        status,
+        reviewMode: (reviewMode || 'super_admin_approval') as typeof reviewMode,
+        retakesAllowed: retakesAllowed ?? 0,
+        retakeOnFailOnly: retakeOnFailOnly ?? true,
+        targetRole,
+      };
 
-        let res = await supabase.rpc('update_test', {
-          p_test_id: test.id,
-          p_title: safeTitle,
-          p_description: safeDesc,
-          p_pass_mark: safePassMark,
-          p_status: status,
-          p_review_mode: safeReviewMode,
-          p_retakes_allowed: safeRetakes,
-          p_retake_on_fail_only: safeRetakeFailOnly,
-          p_target_role: safeTargetRole,
-        });
+      const result = test
+        ? await updateTestRecord({ ...payload, id: test.id })
+        : await createTestRecord(payload);
 
-        if (res.error) {
-          res = await supabase.rpc('update_test', {
-            p_test_id: test.id,
-            p_title: safeTitle,
-            p_description: safeDesc,
-            p_pass_mark: safePassMark,
-            p_status: status,
-            p_review_mode: safeReviewMode,
-            p_retakes_allowed: safeRetakes,
-            p_retake_on_fail_only: safeRetakeFailOnly,
-          });
-        }
-
-        if (res.error) {
-          res = await supabase.rpc('update_test', {
-            p_test_id: test.id,
-            p_title: safeTitle,
-            p_description: safeDesc,
-            p_pass_mark: safePassMark,
-            p_status: status,
-            p_review_mode: safeReviewMode,
-          });
-        }
-
-        // NEVER call 5 params (avoid ambiguous overload)
-
-        if (res.error) throw new Error(res.error.message || 'Failed to update test');
-        try {
-          await supabase.from('tests').update({ target_role: targetRole }).eq('id', test.id);
-        } catch {
-          // best effort
-        }
-      } else {
-        let res = await supabase.rpc('create_test', {
-          p_title: title.trim(),
-          p_description: taggedDesc,
-          p_pass_mark: passMark,
-          p_review_mode: reviewMode,
-          p_retakes_allowed: retakesAllowed,
-          p_retake_on_fail_only: retakeOnFailOnly,
-          p_target_role: targetRole,
-        });
-
-        if (res.error) {
-          res = await supabase.rpc('create_test', {
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
-            p_review_mode: reviewMode,
-            p_retakes_allowed: retakesAllowed,
-            p_retake_on_fail_only: retakeOnFailOnly,
-          });
-        }
-
-        if (res.error) {
-          res = await supabase.rpc('create_test', {
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
-            p_review_mode: reviewMode,
-          });
-        }
-
-        if (res.error) {
-          res = await supabase.rpc('create_test', {
-            p_title: title.trim(),
-            p_description: taggedDesc,
-            p_pass_mark: passMark,
-          });
-        }
-
-        if (res.error) throw new Error(res.error.message || 'Failed to create test');
-        if (res.data) {
-          try {
-            await supabase.from('tests').update({ target_role: targetRole }).eq('id', res.data);
-          } catch {
-            // best effort
-          }
-        }
-      }
+      if (result.error) throw new Error(result.error);
       onSaved();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save test');

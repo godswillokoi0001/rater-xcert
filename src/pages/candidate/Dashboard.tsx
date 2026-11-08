@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
+import { evaluateRetakeEligibility } from '@/lib/testPolicy';
 import {
   applyManualGradingToAttempt,
   stripManualGradingTag,
@@ -150,42 +151,23 @@ export function CandidateDashboard() {
     const testAttempts = attempts.filter((a) => a.test_id === testId);
     if (testAttempts.length === 0) return { canTake: true, label: 'Available' };
 
-    const hasUnreleased = testAttempts.some((a) => a.review_status === 'pending_review' || a.review_status === 'reviewed');
-    if (hasUnreleased) return { canTake: false, label: 'Awaiting Review', reason: 'Your previous attempt is awaiting admin review.' };
+    // Shared policy evaluation: test-level retake rules, then manual admin grants.
+    const eligibility = evaluateRetakeEligibility(test, testAttempts, retakeInfo[testId] || 0);
 
-    const releasedAttempts = testAttempts.filter((a) => a.review_status === 'released');
-    if (releasedAttempts.length > 0) {
-      const latestAttempt = releasedAttempts[0];
-      const isFailed = latestAttempt.pass_or_fail === 'fail';
-
-      const testRetakes = test?.retakes_allowed ?? 0;
-      const failOnly = test?.retake_on_fail_only ?? true;
-
-      // Check test-level retake policy
-      if (testRetakes === -1) {
-        if (!failOnly || isFailed) {
-          return { canTake: true, label: 'Retake Available', retakesRemaining: 999 };
-        }
-      } else if (testRetakes > 0) {
-        const retakesUsed = Math.max(0, releasedAttempts.length - 1);
-        if (retakesUsed < testRetakes && (!failOnly || isFailed)) {
-          return { canTake: true, label: 'Retake Available', retakesRemaining: testRetakes - retakesUsed };
-        }
-      }
-
-      // Check manual admin unlock override
-      const manualRemaining = retakeInfo[testId];
-      if (manualRemaining && manualRemaining > 0) {
-        return { canTake: true, label: 'Retake Available', retakesRemaining: manualRemaining };
-      }
-
-      if (latestAttempt.pass_or_fail === 'pass') {
-        return { canTake: false, label: 'Passed', reason: 'You have already passed this certification exam.' };
-      }
-      return { canTake: false, label: 'Retakes Exhausted', reason: 'You have reached the maximum number of retakes for this test.' };
+    if (eligibility.canTake) {
+      const hasReleasedAttempt = testAttempts.some((a) => a.review_status === 'released');
+      return hasReleasedAttempt
+        ? { canTake: true, label: 'Retake Available', retakesRemaining: eligibility.retakesRemaining }
+        : { canTake: true, label: 'Available' };
     }
 
-    return { canTake: true, label: 'Available' };
+    if (eligibility.blockReason === 'unreleased') {
+      return { canTake: false, label: 'Awaiting Review', reason: 'Your previous attempt is awaiting admin review.' };
+    }
+    if (eligibility.blockReason === 'passed') {
+      return { canTake: false, label: 'Passed', reason: 'You have already passed this certification exam.' };
+    }
+    return { canTake: false, label: 'Retakes Exhausted', reason: 'You have reached the maximum number of retakes for this test.' };
   };
 
   return (

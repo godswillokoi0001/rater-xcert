@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { getTestRetakePolicy, stripRetakePolicyTags, writeRetakePolicyTags } from './testPolicy';
+import { updateTestRecord } from './testRpc';
 import type { UserTestAccess } from '../types';
 
 const STORAGE_KEY = 'raterx_user_test_access_overrides';
@@ -62,11 +64,12 @@ export function updateDescriptionAccessTags(
 }
 
 export function cleanTestDescription(description: string = ''): string {
-  return description
-    .replace(/\[ROLE:(worker|candidate)\]/g, '')
-    .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
-    .replace(/\[GRANTED_USERS:[^\]]*\]/g, '')
-    .trim();
+  return stripRetakePolicyTags(
+    description
+      .replace(/\[ROLE:(worker|candidate)\]/g, '')
+      .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
+      .replace(/\[GRANTED_USERS:[^\]]*\]/g, '')
+  );
 }
 
 function getLocalOverrides(): Record<string, Record<string, { access_type: 'blocked' | 'granted'; created_at: string }>> {
@@ -96,62 +99,31 @@ function setLocalOverride(userId: string, testId: string, accessType: 'blocked' 
 }
 
 async function updateTestInDatabase(test: any, newDescription: string) {
-  const safeTitle = test.title || 'Untitled Test';
-  const safeDesc = newDescription || '';
-  const safePassMark = Number(test.pass_mark) || 70;
-  const safeStatus = test.status || 'draft';
-  const safeReviewMode = test.review_mode || 'super_admin_approval';
-  const safeRetakes = test.retakes_allowed ?? 0;
-  const safeRetakeFailOnly = test.retake_on_fail_only ?? true;
-  const safeTargetRole = test.target_role || 'all';
+  const policy = getTestRetakePolicy(test);
+  // Keep the retake policy tags on the description so blocking/granting a user
+  // can never wipe the retake settings the admin configured.
+  const safeDesc = writeRetakePolicyTags(newDescription || '', policy);
 
-  // 1. Try 9 params (migration 014)
-  let res = await supabase.rpc('update_test', {
-    p_test_id: test.id,
-    p_title: safeTitle,
-    p_description: safeDesc,
-    p_pass_mark: safePassMark,
-    p_status: safeStatus,
-    p_review_mode: safeReviewMode,
-    p_retakes_allowed: safeRetakes,
-    p_retake_on_fail_only: safeRetakeFailOnly,
-    p_target_role: safeTargetRole,
+  const result = await updateTestRecord({
+    id: test.id,
+    title: test.title || 'Untitled Test',
+    description: safeDesc,
+    passMark: Number(test.pass_mark) || 70,
+    status: test.status || 'draft',
+    reviewMode: test.review_mode || 'super_admin_approval',
+    retakesAllowed: policy.retakesAllowed,
+    retakeOnFailOnly: policy.retakeOnFailOnly,
+    targetRole: test.target_role || 'all',
   });
 
-  // 2. Try 8 params (migration 013)
-  if (res.error) {
-    res = await supabase.rpc('update_test', {
-      p_test_id: test.id,
-      p_title: safeTitle,
-      p_description: safeDesc,
-      p_pass_mark: safePassMark,
-      p_status: safeStatus,
-      p_review_mode: safeReviewMode,
-      p_retakes_allowed: safeRetakes,
-      p_retake_on_fail_only: safeRetakeFailOnly,
-    });
+  // Also best effort direct update so the tags land even if the RPC rejects.
+  if (!result.error) {
+    try {
+      await supabase.from('tests').update({ description: safeDesc }).eq('id', test.id);
+    } catch {}
   }
 
-  // 3. Try 6 params (migration 009 - canonical remote DB signature)
-  if (res.error) {
-    res = await supabase.rpc('update_test', {
-      p_test_id: test.id,
-      p_title: safeTitle,
-      p_description: safeDesc,
-      p_pass_mark: safePassMark,
-      p_status: safeStatus,
-      p_review_mode: safeReviewMode,
-    });
-  }
-
-  // NEVER call 5 params (to avoid PostgreSQL ambiguous function overload)
-
-  // Also best effort direct update
-  try {
-    await supabase.from('tests').update({ description: safeDesc }).eq('id', test.id);
-  } catch {}
-
-  return res;
+  return { error: result.error ? { message: result.error } : null };
 }
 
 export async function fetchUserTestAccess(userId: string): Promise<Record<string, UserTestAccess>> {
