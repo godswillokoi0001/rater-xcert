@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { evaluateRetakeEligibility } from '@/lib/testPolicy';
+import { evaluateRetakeEligibility, getTestAudience } from '@/lib/testPolicy';
 import {
   applyManualGradingToAttempt,
   stripManualGradingTag,
@@ -88,10 +88,11 @@ export function CandidateDashboard() {
       accessMap[acc.test_id] = acc.access_type;
     });
 
-    // Candidates see tests targeted to 'candidate' or 'all', or granted individually
+    // Candidates see candidate or shared tests. Worker-only tests are removed
+    // before any individual access override is considered, so no grant can put
+    // a worker test back on the candidate dashboard.
     const eligibleTests = testsWithCounts.filter((t) => {
-      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
-      if (isWorkerTest) return false;
+      if (getTestAudience(t) === 'worker') return false;
 
       // Central database tags check
       const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
@@ -102,7 +103,7 @@ export function CandidateDashboard() {
       const override = accessMap[t.id];
       if (override === 'blocked') return false;
       if (override === 'granted') return true;
-      const target = t.target_role || 'all';
+      const target = getTestAudience(t);
       return target === 'all' || target === 'candidate';
     });
 

@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { evaluateRetakeEligibility } from '@/lib/testPolicy';
+import { evaluateRetakeEligibility, getTestAudience } from '@/lib/testPolicy';
+import { isWorkerProfile } from '@/lib/userRoles';
 import { useAuth } from '@/lib/auth';
 import { navigate } from '@/lib/router';
 import { Button, Card, Badge, Spinner } from '@/components/ui';
@@ -67,8 +68,8 @@ export function TestTakingPage({ testId }: { testId: string }) {
       if (!test) { navigate(homePath); return; }
       if (test.status !== 'published') { navigate(homePath); return; }
 
-      const isWorkerUser = profile?.role === 'worker' || (profile?.permissions || []).includes('worker');
-      const isWorkerTest = test.target_role === 'worker' || test.description?.includes('[ROLE:worker]');
+      const isWorkerUser = isWorkerProfile(profile);
+      const isWorkerTest = getTestAudience(test) === 'worker';
 
       if (isWorkerUser && !isWorkerTest) {
         setBlockedReason('This assessment is reserved for candidates. Please return to the Worker Portal for worker tests.');

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { writeRetakePolicyTags } from './testPolicy';
+import { writeRetakePolicyTags, writeRoleTag } from './testPolicy';
 import type { ReviewMode, TestStatus, TestTargetRole } from '../types';
 
 /**
@@ -58,7 +58,10 @@ function normalizedPolicy(payload: TestSettingsPayload) {
 }
 
 function normalizedDescription(payload: TestSettingsPayload): string {
-  return writeRetakePolicyTags(payload.description || '', normalizedPolicy(payload));
+  // The audience is written as a tag as well as a column, so a test can never
+  // drift into the wrong portal if one of the two writes is lost.
+  const withAudience = writeRoleTag(payload.description || '', normalizedRole(payload));
+  return writeRetakePolicyTags(withAudience, normalizedPolicy(payload));
 }
 
 function normalizedRole(payload: TestSettingsPayload): TestTargetRole {

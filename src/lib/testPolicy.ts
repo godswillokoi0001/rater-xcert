@@ -68,6 +68,55 @@ export function writeRetakePolicyTags(description: string = '', policy: RetakePo
   return `${clean} ${countTag} ${modeTag}`.trim();
 }
 
+export type TestAudience = 'worker' | 'candidate' | 'all';
+
+const ROLE_WORKER_TAG_RE = /\[ROLE:\s*workers?\]/i;
+const ROLE_CANDIDATE_TAG_RE = /\[ROLE:\s*candidates?\]/i;
+const ROLE_TAG_RE_G = /\[ROLE:\s*(?:workers?|candidates?)\]/gi;
+
+/** Reads the audience tag written into a test description. */
+export function parseRoleTag(description: string = ''): 'worker' | 'candidate' | null {
+  if (ROLE_WORKER_TAG_RE.test(description || '')) return 'worker';
+  if (ROLE_CANDIDATE_TAG_RE.test(description || '')) return 'candidate';
+  return null;
+}
+
+/** Removes audience tags so they never reach candidate/worker facing copy. */
+export function stripRoleTags(description: string = ''): string {
+  return (description || '')
+    .replace(ROLE_TAG_RE_G, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/** Appends (or replaces) the audience tag on a description. */
+export function writeRoleTag(description: string = '', audience: TestAudience): string {
+  const clean = stripRoleTags(description);
+  if (audience !== 'worker' && audience !== 'candidate') return clean;
+  return `${clean} ${audience === 'worker' ? '[ROLE:worker]' : '[ROLE:candidate]'}`.trim();
+}
+
+/**
+ * Resolves which audience a test belongs to.
+ *
+ * The `target_role` column is authoritative once it is set, but every test also
+ * carries a `[ROLE:...]` tag so the audience survives databases/builds that do
+ * not know about the column. A worker signal always wins, so a mislabelled test
+ * can never leak into the candidate portal.
+ */
+export function getTestAudience(
+  test?: { target_role?: string | null; description?: string | null } | null
+): TestAudience {
+  const role = (test?.target_role || '').trim().toLowerCase();
+  const fromColumn: 'worker' | 'candidate' | null =
+    role === 'worker' || role === 'candidate' ? role : null;
+  const fromTag = parseRoleTag(test?.description || '');
+
+  if (fromColumn === 'worker' || fromTag === 'worker') return 'worker';
+  if (fromColumn === 'candidate' || fromTag === 'candidate') return 'candidate';
+  return 'all';
+}
+
 type TestPolicySource = Pick<Test, 'retakes_allowed' | 'retake_on_fail_only'> & {
   description?: string | null;
 };

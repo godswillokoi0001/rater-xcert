@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchUserTestAccess, parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { evaluateRetakeEligibility } from '@/lib/testPolicy';
+import { evaluateRetakeEligibility, getTestAudience } from '@/lib/testPolicy';
 import {
   applyManualGradingToAttempt,
   stripManualGradingTag,
@@ -88,8 +88,11 @@ export function WorkerDashboard() {
       accessMap[acc.test_id] = acc.access_type;
     });
 
-    // Workers see tests strictly targeted to workers, or granted individually
+    // Workers only ever see worker tests. Individual access overrides can
+    // narrow that list but never pull a candidate test into the worker portal.
     const eligibleTests = testsWithCounts.filter((t) => {
+      if (getTestAudience(t) !== 'worker') return false;
+
       // Central database tags check
       const { blockedUsers, grantedUsers } = parseAccessTags(t.description || '');
       const uid = (user.id || '').trim().toLowerCase();
@@ -98,9 +101,7 @@ export function WorkerDashboard() {
 
       const override = accessMap[t.id];
       if (override === 'blocked') return false;
-      if (override === 'granted') return true;
-      const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
-      return isWorkerTest;
+      return true;
     });
 
     const enrichedAttempts = attemptsWithTitles.map((a) => applyManualGradingToAttempt(a));

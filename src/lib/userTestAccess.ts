@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { getTestRetakePolicy, stripRetakePolicyTags, writeRetakePolicyTags } from './testPolicy';
+import { getTestAudience, getTestRetakePolicy, stripRetakePolicyTags, stripRoleTags, writeRetakePolicyTags, writeRoleTag } from './testPolicy';
 import { updateTestRecord } from './testRpc';
 import type { UserTestAccess } from '../types';
 
@@ -64,12 +64,10 @@ export function updateDescriptionAccessTags(
 }
 
 export function cleanTestDescription(description: string = ''): string {
-  return stripRetakePolicyTags(
-    description
-      .replace(/\[ROLE:(worker|candidate)\]/g, '')
-      .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
-      .replace(/\[GRANTED_USERS:[^\]]*\]/g, '')
-  );
+  const withoutAccessTags = (description || '')
+    .replace(/\[BLOCKED_USERS:[^\]]*\]/g, '')
+    .replace(/\[GRANTED_USERS:[^\]]*\]/g, '');
+  return stripRetakePolicyTags(stripRoleTags(withoutAccessTags));
 }
 
 function getLocalOverrides(): Record<string, Record<string, { access_type: 'blocked' | 'granted'; created_at: string }>> {
@@ -100,9 +98,10 @@ function setLocalOverride(userId: string, testId: string, accessType: 'blocked' 
 
 async function updateTestInDatabase(test: any, newDescription: string) {
   const policy = getTestRetakePolicy(test);
-  // Keep the retake policy tags on the description so blocking/granting a user
-  // can never wipe the retake settings the admin configured.
-  const safeDesc = writeRetakePolicyTags(newDescription || '', policy);
+  // Blocking/granting a user must never change which audience a test belongs
+  // to, so both the audience column and the audience tag are carried through.
+  const audience = getTestAudience(test);
+  const safeDesc = writeRetakePolicyTags(writeRoleTag(newDescription || '', audience), policy);
 
   const result = await updateTestRecord({
     id: test.id,
@@ -113,7 +112,7 @@ async function updateTestInDatabase(test: any, newDescription: string) {
     reviewMode: test.review_mode || 'super_admin_approval',
     retakesAllowed: policy.retakesAllowed,
     retakeOnFailOnly: policy.retakeOnFailOnly,
-    targetRole: test.target_role || 'all',
+    targetRole: audience,
   });
 
   // Also best effort direct update so the tags land even if the RPC rejects.

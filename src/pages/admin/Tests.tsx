@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { parseAccessTags, cleanTestDescription } from '@/lib/userTestAccess';
-import { getTestRetakePolicy, writeRetakePolicyTags } from '@/lib/testPolicy';
+import { getTestAudience, getTestRetakePolicy, writeRetakePolicyTags, writeRoleTag } from '@/lib/testPolicy';
+import type { TestAudience } from '@/lib/testPolicy';
 import { createTestRecord, updateTestRecord } from '@/lib/testRpc';
 import { RouteGuard, AdminLayout } from '@/components/layouts';
 import { Button, Card, Badge, Input, Textarea, Label, Modal, Spinner, EmptyState, ConfirmDialog, Select } from '@/components/ui';
-import type { Test, Section, Question, Option, QuestionLink, TestStatus, ReviewMode, QuestionType, ScoringMode } from '@/types';
+import type { Test, Section, Question, Option, QuestionLink, TestStatus, ReviewMode, QuestionType, ScoringMode, TestTargetRole } from '@/types';
 import { ShieldCheck, Zap, RotateCcw, Users, Briefcase, GraduationCap } from 'lucide-react';
 import {
   Plus, FileText, ChevronDown, ChevronRight, Trash2, Edit3, GripVertical,
@@ -76,7 +77,7 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
       const all = (testsData || []).map((t) => ({ ...t, section_count: sectionCounts[t.id] || 0 })) as (Test & { section_count?: number })[];
 
       const filtered = all.filter((t) => {
-        const isWorkerTest = t.target_role === 'worker' || t.description?.includes('[ROLE:worker]');
+        const isWorkerTest = getTestAudience(t) === 'worker';
         return isWorkerTab ? isWorkerTest : !isWorkerTest;
       });
 
@@ -110,7 +111,7 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
       reviewMode: test.review_mode || 'super_admin_approval',
       retakesAllowed: policy.retakesAllowed,
       retakeOnFailOnly: policy.retakeOnFailOnly,
-      targetRole: test.target_role || (isWorkerTab ? 'worker' : 'candidate'),
+      targetRole: getTestAudience(test),
     });
 
     if (result.error) {
@@ -208,12 +209,12 @@ export function AdminTestsPage({ roleFilter = 'candidate' }: { roleFilter?: 'can
                             <RetakePolicyLabel test={test} />
                           </span>
                           <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${
-                            test.target_role === 'worker' || test.description?.includes('[ROLE:worker]')
+                            getTestAudience(test) === 'worker'
                               ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                               : 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                           }`}>
-                            {test.target_role === 'worker' || test.description?.includes('[ROLE:worker]') ? <Briefcase size={10} /> : <GraduationCap size={10} />}
-                            {test.target_role === 'worker' || test.description?.includes('[ROLE:worker]') ? 'Workers Only' : 'Candidates Only'}
+                            {getTestAudience(test) === 'worker' ? <Briefcase size={10} /> : <GraduationCap size={10} />}
+                            {getTestAudience(test) === 'worker' ? 'Workers Only' : 'Candidates Only'}
                           </span>
                         </div>
                       </div>
@@ -285,9 +286,9 @@ function TestEditorModal({
   onSaved: () => void;
   defaultTargetRole?: 'candidate' | 'worker';
 }) {
-  const isWorkerTarget = defaultTargetRole === 'worker' || test?.target_role === 'worker' || test?.description?.includes('[ROLE:worker]');
   const rawDesc = test?.description || '';
   const initialCleanDesc = cleanTestDescription(rawDesc);
+  const initialAudience: TestAudience = test ? getTestAudience(test) : defaultTargetRole;
 
   const [title, setTitle] = useState(test?.title || '');
   const [description, setDescription] = useState(initialCleanDesc);
@@ -297,10 +298,13 @@ function TestEditorModal({
   const initialRetakePolicy = getTestRetakePolicy(test);
   const [retakesAllowed, setRetakesAllowed] = useState<number>(initialRetakePolicy.retakesAllowed);
   const [retakeOnFailOnly, setRetakeOnFailOnly] = useState<boolean>(initialRetakePolicy.retakeOnFailOnly);
+  const [audience, setAudience] = useState<TestAudience>(initialAudience);
   const [saving, setSaving] = useState(false);
 
-  // Target role is strictly locked to worker in Workers Tests and candidate in Candidate Tests
-  const targetRole: 'candidate' | 'worker' = isWorkerTarget ? 'worker' : 'candidate';
+  // The audience defaults to the tab the editor was opened from and can be
+  // changed here, so a test saved with the wrong audience can be moved.
+  const isWorkerTarget = audience === 'worker';
+  const targetRole: TestTargetRole = audience;
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -311,11 +315,7 @@ function TestEditorModal({
 
     const { blockedUsers, grantedUsers } = parseAccessTags(rawDesc);
     let taggedDesc = cleanTestDescription(description);
-    if (targetRole === 'worker') {
-      taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:worker]` : '[ROLE:worker]';
-    } else {
-      taggedDesc = taggedDesc ? `${taggedDesc} [ROLE:candidate]` : '[ROLE:candidate]';
-    }
+    taggedDesc = writeRoleTag(taggedDesc, targetRole);
     // Mirror the retake policy into the description tags (works on databases
     // that do not have the retake columns yet) before the access tags.
     taggedDesc = writeRetakePolicyTags(taggedDesc, {
@@ -392,6 +392,18 @@ function TestEditorModal({
               </Select>
             </div>
           )}
+        </div>
+
+        <div>
+          <Label>Audience</Label>
+          <Select value={audience} onChange={(e) => setAudience(e.target.value as TestAudience)}>
+            <option value="candidate">Candidates only</option>
+            <option value="worker">Workers only</option>
+            {(initialAudience === 'all' || audience === 'all') && <option value="all">Everyone (shared)</option>}
+          </Select>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Worker tests only appear in the Workers portal; candidate tests only in the Candidate portal.
+          </p>
         </div>
 
         {/* Retakes & Limits Configuration */}
